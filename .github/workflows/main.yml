@@ -1,0 +1,29 @@
+
+name: KRIPTO RADAR 50 FUTURES
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  futures-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Depoyu indir
+        uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Gerekli paketleri kur
+        run: pip install -r requirements.txt
+
+      - name: Futures taramasini calistir
+        run: python radar.py
