@@ -1,46 +1,121 @@
 
-import requests
-import json
+name: BINANCE FUTURES BAGLANTI TESTI
 
-print("BINANCE FUTURES GERCEK VERI TESTI")
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
-hosts = [
-    "https://fapi.binance.com",
-    "https://fapi1.binance.com",
-    "https://fapi2.binance.com",
-    "https://fapi3.binance.com",
-    "https://fapi4.binance.com"
-]
+jobs:
+  futures-test:
+    runs-on: ubuntu-latest
 
-for host in hosts:
-    print("\n" + "=" * 45)
-    print("ADRES:", host)
+    steps:
+      - name: Python Hazirla
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-    for endpoint in [
-        "/fapi/v1/ping",
-        "/fapi/v1/time",
-        "/fapi/v1/ticker/price?symbol=BTCUSDT"
-    ]:
-        try:
-            r = requests.get(
-                host + endpoint,
-                timeout=15,
-                headers={"User-Agent": "Mozilla/5.0"}
-            )
+      - name: Binance Futures API Testi
+        run: |
+          python - <<'PY'
+          import urllib.request
+          import urllib.error
+          import json
+          import time
 
-            print("\nTEST:", endpoint)
-            print("HTTP:", r.status_code)
-            print("YANIT:", r.text[:400])
+          hosts = [
+              "https://fapi.binance.com",
+              "https://fapi1.binance.com",
+              "https://fapi2.binance.com",
+              "https://fapi3.binance.com",
+              "https://fapi4.binance.com"
+          ]
 
-            if r.status_code == 200:
-                try:
-                    data = r.json()
-                    print("JSON:", "GECERLI")
-                    if "ticker/price" in endpoint:
-                        print("BTC FIYATI:", data.get("price"))
-                except ValueError:
-                    print("JSON GECERSIZ")
+          print("=" * 55)
+          print("KRIPTO RADAR 50 - FUTURES BAGLANTI TESTI")
+          print("=" * 55)
 
-        except Exception as e:
-            print("BAGLANTI HATASI:", str(e))
+          working = []
+
+          for host in hosts:
+              print("\nADRES:", host)
+
+              endpoints = [
+                  "/fapi/v1/ping",
+                  "/fapi/v1/time",
+                  "/fapi/v1/ticker/price?symbol=BTCUSDT"
+              ]
+
+              results = {}
+
+              for endpoint in endpoints:
+                  url = host + endpoint
+                  print("\nTEST:", endpoint)
+
+                  request = urllib.request.Request(
+                      url,
+                      headers={"User-Agent": "Mozilla/5.0"}
+                  )
+
+                  try:
+                      with urllib.request.urlopen(
+                          request, timeout=15
+                      ) as response:
+                          status = response.status
+                          body = response.read().decode("utf-8")
+
+                      print("HTTP:", status)
+                      print("YANIT:", body[:300])
+
+                      if status == 200:
+                          try:
+                              data = json.loads(body)
+                              results[endpoint] = data
+                              print("JSON: GECERLI")
+                          except Exception:
+                              print("JSON: GECERSIZ")
+
+                  except urllib.error.HTTPError as e:
+                      print("HTTP HATA:", e.code)
+                      print("MESAJ:", e.read().decode(
+                          "utf-8", errors="replace"
+                      )[:300])
+
+                  except Exception as e:
+                      print("BAGLANTI HATASI:", str(e))
+
+              ticker = results.get(
+                  "/fapi/v1/ticker/price?symbol=BTCUSDT"
+              )
+
+              if ticker:
+                  try:
+                      price = float(ticker["price"])
+                      if ticker.get("symbol") == "BTCUSDT" and price > 0:
+                          print("\nSONUC: GERCEK FUTURES VERISI ALINDI")
+                          print("BTCUSDT:", price)
+                          working.append(host)
+                  except Exception:
+                      print("\nSONUC: FIYAT VERISI GECERSIZ")
+              else:
+                  print("\nSONUC: FUTURES FIYATI ALINAMADI")
+
+              time.sleep(1)
+
+          print("\n" + "=" * 55)
+          print("GENEL RAPOR")
+          print("=" * 55)
+          print("CALISAN ADRES SAYISI:", len(working))
+
+          for host in working:
+              print("BASARILI:", host)
+
+          if not working:
+              print("HICBIR ADRESTEN GERCEK FIYAT ALINAMADI.")
+              print("BOLGE VEYA SUNUCU ERISIM KISITLAMASI OLABILIR.")
+
+          print("\nTEST TAMAMLANDI.")
+          PY
 
