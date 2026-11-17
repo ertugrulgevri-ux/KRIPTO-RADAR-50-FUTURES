@@ -7,13 +7,16 @@ on:
 jobs:
   market-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 3
 
     steps:
       - name: Python kur
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: WebSocket paketini kur
+        run: pip install websocket-client
 
       - name: Binance Futures piyasa testi
         run: |
@@ -41,10 +44,7 @@ jobs:
 
                   for item in message:
                       symbol = item.get("s", "")
-                      if (
-                          symbol.endswith("USDT")
-                          and item.get("st", 1) == 1
-                      ):
+                      if symbol.endswith("USDT"):
                           symbols[symbol] = item
 
               except Exception as error:
@@ -73,6 +73,7 @@ jobs:
 
           print("\nPIYASA VERISI: BASARILI")
           PY
+
 
 
 
