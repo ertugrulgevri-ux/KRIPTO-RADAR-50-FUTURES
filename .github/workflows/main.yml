@@ -1,5 +1,5 @@
 
-name: FUTURE RADAR 50 - MARKET TEST
+name: FUTURE RADAR 50 - FULL MARKET TEST
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
 jobs:
   market-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 2
 
     steps:
       - name: Python kur
@@ -15,64 +15,67 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: WebSocket paketini kur
+      - name: WebSocket paketi kur
         run: pip install websocket-client
 
-      - name: Binance Futures piyasa testi
+      - name: Binance tam piyasa listesi
         run: |
           python - <<'PY'
           import json
           import websocket
-          import time
 
-          url = "wss://fstream.binance.com/market/ws/!ticker@arr"
+          url = "wss://ws-fapi.binance.com/ws-fapi/v1"
 
-          print("BINANCE FUTURES PIYASA TESTI")
+          print("BINANCE TAM FUTURES PIYASA TESTI")
 
-          ws = websocket.create_connection(url, timeout=20)
-          print("BAGLANTI: BASARILI")
+          ws = websocket.create_connection(url, timeout=30)
 
-          symbols = {}
-          start = time.time()
+          request = {
+              "id": "radar-full-market",
+              "method": "ticker.24hr"
+          }
 
-          while time.time() - start < 20:
-              try:
-                  message = json.loads(ws.recv())
-
-                  if isinstance(message, dict):
-                      message = [message]
-
-                  for item in message:
-                      symbol = item.get("s", "")
-                      if symbol.endswith("USDT"):
-                          symbols[symbol] = item
-
-              except Exception as error:
-                  print("OKUMA:", str(error))
-                  break
-
+          ws.send(json.dumps(request))
+          response = json.loads(ws.recv())
           ws.close()
 
-          ranked = sorted(
-              symbols.values(),
-              key=lambda x: float(x.get("q", 0)),
+          print("YANIT DURUMU:", response.get("status"))
+
+          if response.get("status") != 200:
+              print(json.dumps(response, indent=2))
+              raise RuntimeError("Tam piyasa verisi alinamadi")
+
+          result = response.get("result", [])
+
+          if isinstance(result, dict):
+              result = [result]
+
+          usdt = [
+              x for x in result
+              if x.get("symbol", "").endswith("USDT")
+          ]
+
+          usdt.sort(
+              key=lambda x: float(x.get("quoteVolume", 0)),
               reverse=True
           )
 
-          print("\nBULUNAN USDT FUTURES COIN:", len(ranked))
+          print("TOPLAM SOZLESME:", len(result))
+          print("USDT SOZLESME:", len(usdt))
 
-          for item in ranked[:15]:
+          for item in usdt[:20]:
               print(
-                  item["s"],
-                  "Fiyat:", item.get("c"),
-                  "24s hacim:", item.get("q")
+                  item.get("symbol"),
+                  "Fiyat:", item.get("lastPrice"),
+                  "Hacim:", item.get("quoteVolume")
               )
 
-          if not ranked:
-              raise RuntimeError("USDT Futures coin verisi bulunamadi")
+          if not usdt:
+              raise RuntimeError("USDT sozlesmesi bulunamadi")
 
-          print("\nPIYASA VERISI: BASARILI")
+          print("TAM PIYASA TESTI: BASARILI")
           PY
+
 
 
 
