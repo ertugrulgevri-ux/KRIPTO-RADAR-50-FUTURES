@@ -1,13 +1,13 @@
 
-name: FUTURE RADAR 50 - TIMEFRAME TEST
+name: FUTURE RADAR 50 - MARKET TEST
 
 on:
   workflow_dispatch:
 
 jobs:
-  timeframe-test:
+  market-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 2
 
     steps:
       - name: Python kur
@@ -15,77 +15,65 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Binance 5 zaman dilimi testi
+      - name: Binance Futures piyasa testi
         run: |
           python - <<'PY'
-          import urllib.request
-          import zipfile
-          import io
-          import csv
+          import json
+          import websocket
+          import time
 
-          symbol = "BTCUSDT"
-          intervals = ["5m", "15m", "1h", "4h", "1d"]
-          month = "2026-10"
+          url = "wss://fstream.binance.com/market/ws/!ticker@arr"
 
-          print("FUTURE RADAR 50 - ZAMAN DILIMI TESTI")
+          print("BINANCE FUTURES PIYASA TESTI")
 
-          success = 0
+          ws = websocket.create_connection(url, timeout=20)
+          print("BAGLANTI: BASARILI")
 
-          for interval in intervals:
-              url = (
-                  "https://data.binance.vision/data/futures/um/"
-                  f"monthly/klines/{symbol}/{interval}/"
-                  f"{symbol}-{interval}-{month}.zip"
-              )
+          symbols = {}
+          start = time.time()
 
-              print("\nTEST:", symbol, interval)
-
+          while time.time() - start < 20:
               try:
-                  request = urllib.request.Request(
-                      url,
-                      headers={"User-Agent": "Mozilla/5.0"}
-                  )
+                  message = json.loads(ws.recv())
 
-                  with urllib.request.urlopen(
-                      request, timeout=60
-                  ) as response:
-                      content = response.read()
+                  if isinstance(message, dict):
+                      message = [message]
 
-                  with zipfile.ZipFile(
-                      io.BytesIO(content)
-                  ) as archive:
-                      csv_name = next(
-                          n for n in archive.namelist()
-                          if n.endswith(".csv")
-                      )
-
-                      with archive.open(csv_name) as file:
-                          reader = csv.reader(
-                              io.TextIOWrapper(file, encoding="utf-8")
-                          )
-
-                          header = next(reader)
-                          first = next(reader)
-                          second = next(reader)
-
-                  print("SONUC: BASARILI")
-                  print("Mum sayisi kontrolu: OK")
-                  print("Ilk kapanis:", first[4])
-                  print("Ikinci kapanis:", second[4])
-
-                  success += 1
+                  for item in message:
+                      symbol = item.get("s", "")
+                      if (
+                          symbol.endswith("USDT")
+                          and item.get("st", 1) == 1
+                      ):
+                          symbols[symbol] = item
 
               except Exception as error:
-                  print("SONUC: BASARISIZ")
-                  print("HATA:", str(error))
+                  print("OKUMA:", str(error))
+                  break
 
-          print("\nTOPLAM BASARILI:", success, "/", len(intervals))
+          ws.close()
 
-          if success != len(intervals):
-              raise RuntimeError("Tum zaman dilimleri dogrulanamadi")
+          ranked = sorted(
+              symbols.values(),
+              key=lambda x: float(x.get("q", 0)),
+              reverse=True
+          )
 
-          print("BES ZAMAN DILIMI DE BASARILI")
+          print("\nBULUNAN USDT FUTURES COIN:", len(ranked))
+
+          for item in ranked[:15]:
+              print(
+                  item["s"],
+                  "Fiyat:", item.get("c"),
+                  "24s hacim:", item.get("q")
+              )
+
+          if not ranked:
+              raise RuntimeError("USDT Futures coin verisi bulunamadi")
+
+          print("\nPIYASA VERISI: BASARILI")
           PY
+
 
 
 
