@@ -27,3 +27,6 @@ jobs:
 
       - name: Futures taramasini calistir
         run: python radar.py
+      - name: Binance API baglanti testi
+        run: |
+          python -c "import requests; r=requests.get('https://fapi.binance.com/fapi/v1/ping', timeout=20); print('HTTP:', r.status_code); print('YANIT:', r.text); r.raise_for_status()"
