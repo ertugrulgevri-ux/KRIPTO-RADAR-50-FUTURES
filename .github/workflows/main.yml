@@ -1,55 +1,59 @@
 
-name: BINANCE FUTURES KLINE STREAM TEST
+name: BINANCE FUTURES HISTORY TEST
 
 on:
   workflow_dispatch:
 
 jobs:
-  kline-test:
+  history-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
-
     steps:
-      - name: Depoyu indir
-        uses: actions/checkout@v4
-
       - name: Python kur
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: WebSocket paketini kur
-        run: pip install websocket-client
-
-      - name: Binance Futures mum akisi
+      - name: Binance gecmis mum arsivi testi
         run: |
           python - <<'PY'
-          import json
-          import websocket
+          import urllib.request
+          import zipfile
+          import io
+          import csv
 
-          url = "wss://fstream.binance.com/market/ws/btcusdt@kline_1m"
+          url = "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2026-10.zip"
 
-          print("BINANCE FUTURES KLINE STREAM")
-          print("Adres:", url)
+          print("BINANCE FUTURES GECMIS VERI TESTI")
 
-          ws = websocket.create_connection(url, timeout=30)
+          request = urllib.request.Request(
+              url,
+              headers={"User-Agent": "Mozilla/5.0"}
+          )
 
-          print("BAGLANTI: BASARILI")
+          with urllib.request.urlopen(request, timeout=60) as response:
+              content = response.read()
+              print("HTTP:", response.status)
 
-          data = json.loads(ws.recv())
+          print("ZIP BOYUTU:", len(content), "bayt")
 
-          print("GELEN VERI:")
-          print(json.dumps(data, indent=2))
+          with zipfile.ZipFile(io.BytesIO(content)) as archive:
+              csv_name = next(
+                  name for name in archive.namelist()
+                  if name.endswith(".csv")
+              )
 
-          if data.get("e") == "kline":
-              print("MUM AKISI: BASARILI")
-              print("Coin:", data["s"])
-              print("Zaman dilimi:", data["k"]["i"])
-              print("Son fiyat:", data["k"]["c"])
-          else:
-              print("BEKLENMEYEN VERI")
+              with archive.open(csv_name) as file:
+                  reader = csv.reader(
+                      io.TextIOWrapper(file, encoding="utf-8")
+                  )
 
-          ws.close()
+                  rows = [next(reader) for _ in range(3)]
+
+          print("GECMIS MUM: BASARILI")
+          print("SUTUN SAYISI:", len(rows[0]))
+          print("ILK MUM:", rows[0])
+          print("IKINCI MUM:", rows[1])
+          print("UCUNCU MUM:", rows[2])
           PY
 
 
