@@ -1,80 +1,51 @@
 
-name: FUTURE RADAR 50 - FULL MARKET TEST
+name: Binance Metadata Test
 
 on:
   workflow_dispatch:
 
 jobs:
-  market-test:
+  test:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
-
     steps:
-      - name: Python kur
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: WebSocket paketi kur
-        run: pip install websocket-client
-
-      - name: Binance tam piyasa listesi
+      - name: Test Binance exchangeInfo
         run: |
           python - <<'PY'
+          import urllib.request
           import json
-          import websocket
 
-          url = "wss://ws-fapi.binance.com/ws-fapi/v1"
-
-          print("BINANCE TAM FUTURES PIYASA TESTI")
-
-          ws = websocket.create_connection(url, timeout=30)
-
-          request = {
-              "id": "radar-full-market",
-              "method": "ticker.24hr"
-          }
-
-          ws.send(json.dumps(request))
-          response = json.loads(ws.recv())
-          ws.close()
-
-          print("YANIT DURUMU:", response.get("status"))
-
-          if response.get("status") != 200:
-              print(json.dumps(response, indent=2))
-              raise RuntimeError("Tam piyasa verisi alinamadi")
-
-          result = response.get("result", [])
-
-          if isinstance(result, dict):
-              result = [result]
-
-          usdt = [
-              x for x in result
-              if x.get("symbol", "").endswith("USDT")
+          hosts = [
+              "https://fapi.binance.com",
+              "https://fapi1.binance.com",
+              "https://fapi2.binance.com",
+              "https://fapi3.binance.com",
+              "https://fapi4.binance.com",
           ]
 
-          usdt.sort(
-              key=lambda x: float(x.get("quoteVolume", 0)),
-              reverse=True
-          )
-
-          print("TOPLAM SOZLESME:", len(result))
-          print("USDT SOZLESME:", len(usdt))
-
-          for item in usdt[:20]:
-              print(
-                  item.get("symbol"),
-                  "Fiyat:", item.get("lastPrice"),
-                  "Hacim:", item.get("quoteVolume")
-              )
-
-          if not usdt:
-              raise RuntimeError("USDT sozlesmesi bulunamadi")
-
-          print("TAM PIYASA TESTI: BASARILI")
+          for host in hosts:
+              url = host + "/fapi/v1/exchangeInfo"
+              print("\nTEST:", host)
+              try:
+                  req = urllib.request.Request(
+                      url,
+                      headers={"User-Agent": "Mozilla/5.0"}
+                  )
+                  with urllib.request.urlopen(req, timeout=15) as r:
+                      data = json.loads(r.read())
+                  symbols = data.get("symbols", [])
+                  print("BASARILI - Sözleşme sayısı:", len(symbols))
+                  for s in symbols[:3]:
+                      print(
+                          s.get("symbol"),
+                          s.get("contractType"),
+                          s.get("status"),
+                          s.get("underlyingType"),
+                          s.get("underlyingSubType")
+                      )
+              except Exception as e:
+                  print("BASARISIZ:", str(e))
           PY
+
 
 
 
