@@ -1,58 +1,33 @@
 
-name: BINANCE FUTURES WEBSOCKET TEST
-
-on:
-  workflow_dispatch:
-
-jobs:
-  websocket-test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-
-    steps:
-      - name: Depoyu indir
-        uses: actions/checkout@v4
-
-      - name: Python kur
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: WebSocket paketini kur
-        run: pip install websocket-client
-
-      - name: Binance Futures WebSocket baglanti testi
+      - name: Binance Futures veri akisi testi
         run: |
           python - <<'PY'
           import json
           import websocket
 
-          url = "wss://fstream.binance.com/ws/btcusdt@kline_1m"
+          streams = [
+              "btcusdt@trade",
+              "btcusdt@markPrice@1s"
+          ]
 
-          print("BINANCE FUTURES WEBSOCKET TESTI")
-          print("Adres:", url)
+          for stream in streams:
+              url = "wss://fstream.binance.com/ws/" + stream
+              print("\nTEST:", stream)
 
-          try:
-              ws = websocket.create_connection(url, timeout=20)
-              print("BAGLANTI: BASARILI")
+              try:
+                  ws = websocket.create_connection(url, timeout=30)
+                  print("BAGLANTI: BASARILI")
 
-              message = ws.recv()
-              data = json.loads(message)
-
-              if data.get("e") == "kline":
+                  data = json.loads(ws.recv())
                   print("VERI: BASARILI")
-                  print("Coin:", data["s"])
-                  print("Zaman dilimi:", data["k"]["i"])
-                  print("Son fiyat:", data["k"]["c"])
-                  print("Mum kapandi mi:", data["k"]["x"])
-              else:
-                  print("BEKLENMEYEN VERI:", data)
+                  print("GELEN VERI:", json.dumps(data)[:500])
 
-              ws.close()
+                  ws.close()
 
-          except Exception as error:
-              print("WEBSOCKET HATASI:", str(error))
-              raise
+              except Exception as error:
+                  print("TEST HATASI:", str(error))
+
           PY
+
 
 
