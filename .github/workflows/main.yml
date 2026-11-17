@@ -1,11 +1,11 @@
 
-name: BINANCE FUTURES WEBSOCKET TEST
+name: BINANCE FUTURES KLINE TEST
 
 on:
   workflow_dispatch:
 
 jobs:
-  websocket-test:
+  kline-test:
     runs-on: ubuntu-latest
     timeout-minutes: 3
 
@@ -21,35 +21,53 @@ jobs:
       - name: WebSocket paketini kur
         run: pip install websocket-client
 
-      - name: Binance Futures veri akisi testi
+      - name: Binance Futures gecmis mum testi
         run: |
           python - <<'PY'
           import json
           import websocket
 
-          streams = [
-              "btcusdt@trade",
-              "btcusdt@markPrice@1s"
-          ]
+          url = "wss://ws-fapi.binance.com/ws-fapi/v1"
 
-          for stream in streams:
-              url = "wss://fstream.binance.com/ws/" + stream
-              print("\nTEST:", stream)
+          request = {
+              "id": "radar-test-001",
+              "method": "klines",
+              "params": {
+                  "symbol": "BTCUSDT",
+                  "interval": "1m",
+                  "limit": 5
+              }
+          }
 
-              try:
-                  ws = websocket.create_connection(url, timeout=30)
-                  print("BAGLANTI: BASARILI")
+          print("BINANCE FUTURES GECMIS MUM TESTI")
 
-                  data = json.loads(ws.recv())
-                  print("VERI: BASARILI")
-                  print("GELEN VERI:", json.dumps(data)[:500])
+          try:
+              ws = websocket.create_connection(url, timeout=20)
+              print("BAGLANTI: BASARILI")
 
-                  ws.close()
+              ws.send(json.dumps(request))
+              response = json.loads(ws.recv())
 
-              except Exception as error:
-                  print("TEST HATASI:", str(error))
+              print("YANIT:")
+              print(json.dumps(response, indent=2))
 
+              if response.get("status") == 200:
+                  candles = response.get("result", [])
+                  print("MUM VERISI: BASARILI")
+                  print("Mum sayisi:", len(candles))
+
+                  if candles:
+                      print("Son kapanis fiyati:", candles[-1][4])
+              else:
+                  print("MUM VERISI BASARISIZ")
+
+              ws.close()
+
+          except Exception as error:
+              print("TEST HATASI:", str(error))
+              raise
           PY
+
 
 
 
