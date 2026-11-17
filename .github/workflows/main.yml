@@ -1,17 +1,13 @@
 
-name: KRIPTO RADAR 50 FUTURES
+name: BINANCE FUTURES WEBSOCKET TEST
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "*/15 * * * *"
-
-permissions:
-  contents: write
 
 jobs:
-  futures-scan:
+  websocket-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
 
     steps:
       - name: Depoyu indir
@@ -22,30 +18,42 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Gerekli paketleri kur
-        run: pip install -r requirements.txt
+      - name: WebSocket paketini kur
+        run: pip install websocket-client
 
-      - name: Binance Futures API erisim testi
+      - name: Binance Futures WebSocket baglanti testi
         run: |
-          python - <<'PY'
-          import requests
+          import json
+          import websocket
 
-          urls = [
-              "https://fapi.binance.com/fapi/v1/ping",
-              "https://fapi.binance.com/fapi/v1/exchangeInfo"
-          ]
+          url = "wss://fstream.binance.com/ws/btcusdt@kline_1m"
 
-          for url in urls:
-              print("\nTEST:", url)
-              try:
-                  response = requests.get(url, timeout=30)
-                  print("HTTP:", response.status_code)
-                  print("YANIT:", response.text[:500])
-                  response.raise_for_status()
-              except Exception as error:
-                  print("BAGLANTI HATASI:", error)
-                  raise
-          PY
+          print("BINANCE FUTURES WEBSOCKET TESTI")
+          print("Adres:", url)
 
-      - name: Futures taramasini calistir
-        run: python radar.py
+          try:
+              ws = websocket.create_connection(
+                  url,
+                  timeout=20
+              )
+
+              print("BAGLANTI: BASARILI")
+
+              message = ws.recv()
+              data = json.loads(message)
+
+              if data.get("e") == "kline":
+                  print("VERI: BASARILI")
+                  print("Coin:", data["s"])
+                  print("Zaman dilimi:", data["k"]["i"])
+                  print("Son fiyat:", data["k"]["c"])
+                  print("Mum kapandi mi:", data["k"]["x"])
+              else:
+                  print("BEKLENMEYEN VERI:", data)
+
+              ws.close()
+
+          except Exception as error:
+              print("WEBSOCKET HATASI:", str(error))
+              raise
+
