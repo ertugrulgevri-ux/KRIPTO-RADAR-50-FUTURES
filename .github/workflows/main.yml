@@ -1,4 +1,26 @@
 
+name: BINANCE FUTURES WEBSOCKET TEST
+
+on:
+  workflow_dispatch:
+
+jobs:
+  websocket-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Depoyu indir
+        uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: WebSocket paketini kur
+        run: pip install websocket-client
+
       - name: Binance Futures veri akisi testi
         run: |
           python - <<'PY'
@@ -28,6 +50,7 @@
                   print("TEST HATASI:", str(error))
 
           PY
+
 
 
 
