@@ -23,6 +23,7 @@ jobs:
 
       - name: Binance Futures WebSocket baglanti testi
         run: |
+          python - <<'PY'
           import json
           import websocket
 
@@ -32,11 +33,7 @@ jobs:
           print("Adres:", url)
 
           try:
-              ws = websocket.create_connection(
-                  url,
-                  timeout=20
-              )
-
+              ws = websocket.create_connection(url, timeout=20)
               print("BAGLANTI: BASARILI")
 
               message = ws.recv()
@@ -56,4 +53,6 @@ jobs:
           except Exception as error:
               print("WEBSOCKET HATASI:", str(error))
               raise
+          PY
+
 
