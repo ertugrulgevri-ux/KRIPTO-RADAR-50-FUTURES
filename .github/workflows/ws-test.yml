@@ -1,12 +1,13 @@
-name: BINANCE FUTURES WEBSOCKET TEST
+
+name: FUTURE RADAR 50 - FULL MARKET TEST
 
 on:
   workflow_dispatch:
 
 jobs:
-  websocket-test:
+  market-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
 
     steps:
       - name: Python Hazirla
@@ -17,35 +18,85 @@ jobs:
       - name: WebSocket Kur
         run: pip install websocket-client
 
-      - name: Binance Futures Gercek Veri Testi
+      - name: Tum Futures Piyasasini Tara
         run: |
           python - <<'PY'
           import websocket
           import json
           import time
 
-          url = "wss://fstream.binance.com/ws/btcusdt@trade"
+          URL = "wss://fstream.binance.com/ws/!ticker@arr"
 
-          print("=" * 50)
-          print("FUTURE RADAR 50 - WEBSOCKET TEST")
-          print("=" * 50)
-          print("Binance Futures BTCUSDT baglantisi deneniyor...")
+          print("=" * 60)
+          print("FUTURE RADAR 50 - FULL MARKET TEST")
+          print("=" * 60)
 
-          ws = websocket.create_connection(url, timeout=15)
+          ws = websocket.create_connection(URL, timeout=15)
+          ws.settimeout(5)
 
-          print("BAGLANTI: BASARILI")
+          print("BINANCE FUTURES BAGLANTISI: BASARILI")
+          print("Piyasa verileri 30 saniye toplanacak...")
 
-          for i in range(5):
-              message = json.loads(ws.recv())
-              print(
-                  "ISLEM:", i + 1,
-                  "| FIYAT:", message.get("p"),
-                  "| MIKTAR:", message.get("q"),
-                  "| ZAMAN:", message.get("T")
-              )
+          market = {}
+          start = time.monotonic()
+
+          while time.monotonic() - start < 30:
+              try:
+                  raw = ws.recv()
+                  data = json.loads(raw)
+
+                  if isinstance(data, dict):
+                      data = [data]
+
+                  for item in data:
+                      symbol = item.get("s", "")
+
+                      if not symbol.endswith("USDT"):
+                          continue
+
+                      try:
+                          price = float(item.get("c", 0))
+                          volume = float(item.get("q", 0))
+                          change = float(item.get("P", 0))
+
+                          if price > 0 and volume > 0:
+                              market[symbol] = {
+                                  "price": price,
+                                  "volume": volume,
+                                  "change": change
+                              }
+                      except (ValueError, TypeError):
+                          continue
+
+              except websocket.WebSocketTimeoutException:
+                  continue
 
           ws.close()
 
-          print("=" * 50)
+          ranked = sorted(
+              market.items(),
+              key=lambda x: x[1]["volume"],
+              reverse=True
+          )
+
+          print("\nTOPLAM USDT PARITE:", len(ranked))
+          print("\nEN YUKSEK HACIMLI ILK 10")
+          print("-" * 60)
+
+          for i, (symbol, item) in enumerate(ranked[:10], 1):
+              print(
+                  f"{i:02d}. {symbol:<16}"
+                  f" Fiyat: {item['price']:<15}"
+                  f" Hacim: {item['volume']:,.0f} USDT"
+                  f" Degisim: %{item['change']:.2f}"
+              )
+
+          print("-" * 60)
+
+          if len(ranked) >= 10:
+              print("SONUC: PIYASA VERISI BASARILI")
+          else:
+              print("SONUC: YETERSIZ VERI")
+
           print("TEST TAMAMLANDI")
           PY
