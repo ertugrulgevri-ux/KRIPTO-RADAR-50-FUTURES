@@ -1,0 +1,99 @@
+
+name: FUTURE RADAR 50 - MARKET DIRECTION TEST
+
+on:
+  workflow_dispatch:
+
+jobs:
+  direction-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python setup
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install numpy pandas
+
+      - name: Run market direction test
+        run: |
+          python - <<'PY'
+          import numpy as np
+          import pandas as pd
+          from indicator_engine import calculate_indicators
+
+          N = 400
+
+          def make_market(kind):
+              x = np.arange(N)
+
+              if kind == "UP":
+                  close = 100 + x * 0.12
+              elif kind == "DOWN":
+                  close = 150 - x * 0.12
+              else:
+                  close = 100 + 0.15 * np.sin(x / 3)
+
+              open_price = np.concatenate(([close[0]], close[:-1]))
+              high = np.maximum(open_price, close) + 0.15
+              low = np.minimum(open_price, close) - 0.15
+              volume = np.full(N, 1000.0)
+
+              return pd.DataFrame({
+                  "open": open_price,
+                  "high": high,
+                  "low": low,
+                  "close": close,
+                  "volume": volume
+              })
+
+          print("=" * 55)
+          print("FUTURE RADAR 50 - MARKET DIRECTION TEST")
+          print("=" * 55)
+
+          results = {}
+
+          for kind in ["UP", "DOWN", "SIDEWAYS"]:
+              result = calculate_indicators(make_market(kind))
+              long_score = result["long_score"]
+              short_score = result["short_score"]
+
+              results[kind] = (long_score, short_score)
+
+              print(f"\n{kind} MARKET")
+              print("LONG:", long_score)
+              print("SHORT:", short_score)
+              print("FARK:", round(long_score - short_score, 2))
+
+          print("\n" + "=" * 55)
+          print("BEKLENTI KONTROLLERI")
+          print("=" * 55)
+
+          up_ok = results["UP"][0] > results["UP"][1]
+          down_ok = results["DOWN"][1] > results["DOWN"][0]
+
+          sideways_difference = abs(
+              results["SIDEWAYS"][0] - results["SIDEWAYS"][1]
+          )
+
+          sideways_ok = sideways_difference < 30
+
+          print("Yukselen piyasada LONG onde:", up_ok)
+          print("Dusen piyasada SHORT onde:", down_ok)
+          print("Yatay piyasada fark 30'dan az:", sideways_ok)
+
+          print("\nTEST OZETI")
+          print("UP:", "BASARILI" if up_ok else "BASARISIZ")
+          print("DOWN:", "BASARILI" if down_ok else "BASARISIZ")
+          print("SIDEWAYS:", "BASARILI" if sideways_ok else "BASARISIZ")
+
+          if not (up_ok and down_ok and sideways_ok):
+              raise SystemExit("MARKET DIRECTION TEST FAILED")
+
+          print("\nSONUC: BUTUN YON TESTLERI BASARILI")
+          PY
