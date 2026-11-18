@@ -1,5 +1,5 @@
 
-name: FUTURE RADAR 50 - TOP 50 UNIVERSE
+name: FUTURE RADAR 50 - ASSET CLASSIFICATION
 
 on:
   workflow_dispatch:
@@ -18,7 +18,7 @@ jobs:
       - name: WebSocket Kur
         run: pip install websocket-client
 
-      - name: Ilk 50 Varligi Belirle
+      - name: Varliklari Siniflandir
         run: |
           python - <<'PY'
           import websocket
@@ -28,92 +28,102 @@ jobs:
 
           URL = "wss://fstream.binance.com/market/ws/!ticker@arr"
 
-          STOCKS = {"NVDA", "SNDK", "SPCX"}
-          COMMODITIES = {"XAU", "XAG", "XPT", "XPD", "WTI"}
-          LEVERAGED_ETFS = {"SOXL", "SOXS", "TQQQ", "SQQQ", "UPRO", "SPXU"}
+          CRYPTO = set("""
+          BTC ETH BNB SOL XRP ADA DOGE TRX LINK AVAX DOT LTC
+          BCH UNI AAVE ETC ATOM NEAR FIL APT ARB OP SUI INJ
+          ICP VET HBAR SHIB TON ZEC HYPE MMT EVAA ENA BLESS
+          ASTER ANT SUI BREV
+          """.split())
 
-          CRYPTO = {
-              "BTC", "ETH", "BNB", "SOL", "XRP", "ADA",
-              "DOGE", "TRX", "LINK", "AVAX", "DOT", "LTC",
-              "BCH", "UNI", "AAVE", "ETC", "ATOM", "NEAR",
-              "FIL", "APT", "ARB", "OP", "SUI", "INJ",
-              "ICP", "VET", "HBAR", "SHIB", "PEPE", "TON"
-          }
+          STOCKS = set("""
+          NVDA SNDK SPCX SKHYNIX MU NBIS MSTR INTC AMD
+          GOOGL SAMSUNG MRVL CRCL CRWV LITE DRAM
+          """.split())
+
+          ETFS = set("""
+          SOXL SOXS TQQQ SQQQ KORU QQQ EWY SPY SNXX
+          """.split())
+
+          COMMODITIES = set("""
+          XAU XAG CL BZ
+          """.split())
 
           def classify(symbol):
               base = symbol[:-4] if symbol.endswith("USDT") else symbol
 
-              if base in LEVERAGED_ETFS:
-                  return "Kaldiracli ETF"
-              if base in COMMODITIES:
-                  return "Emtia"
-              if base in STOCKS:
-                  return "Hisse baglantili"
+              if base.startswith("1000") and base[4:] in CRYPTO:
+                  return "Kripto"
+
               if base in CRYPTO:
                   return "Kripto"
+              if base in STOCKS:
+                  return "Hisse baglantili"
+              if base in ETFS:
+                  return "ETF"
+              if base in COMMODITIES:
+                  return "Emtia"
+
               return "Dogrulanacak"
 
           print("=" * 60)
-          print("FUTURE RADAR 50 - TOP 50 UNIVERSE")
+          print("FUTURE RADAR 50 - ASSET CLASSIFICATION")
           print("=" * 60)
 
           market = {}
 
-          try:
-              ws = websocket.create_connection(URL, timeout=20)
-              ws.settimeout(5)
+          ws = websocket.create_connection(URL, timeout=20)
+          ws.settimeout(5)
 
-              print("BINANCE BAGLANTISI: BASARILI")
-              print("90 saniye boyunca veri toplaniyor...")
+          print("BINANCE BAGLANTISI: BASARILI")
+          print("90 saniye veri toplanacak...")
 
-              start = time.monotonic()
+          start = time.monotonic()
 
-              while time.monotonic() - start < 90:
-                  try:
-                      raw = ws.recv()
-                      data = json.loads(raw)
+          while time.monotonic() - start < 90:
+              try:
+                  data = json.loads(ws.recv())
 
-                      if isinstance(data, dict):
-                          data = [data]
+                  if isinstance(data, dict):
+                      data = [data]
 
-                      for item in data:
-                          symbol = item.get("s", "")
+                  for item in data:
+                      symbol = item.get("s", "")
 
-                          if not symbol.endswith("USDT"):
-                              continue
+                      if not symbol.endswith("USDT"):
+                          continue
 
-                          try:
-                              price = float(item.get("c", 0))
-                              volume = float(item.get("q", 0))
-                              change = float(item.get("P", 0))
+                      try:
+                          price = float(item.get("c", 0))
+                          volume = float(item.get("q", 0))
+                          change = float(item.get("P", 0))
 
-                              if price > 0 and volume > 0:
-                                  market[symbol] = {
-                                      "symbol": symbol,
-                                      "price": price,
-                                      "volume_24h_usdt": volume,
-                                      "change_24h_percent": change
-                                  }
-                          except (ValueError, TypeError):
-                              continue
+                          if price > 0 and volume > 0:
+                              market[symbol] = {
+                                  "symbol": symbol,
+                                  "price": price,
+                                  "volume_24h_usdt": volume,
+                                  "change_24h_percent": change
+                              }
+                      except (ValueError, TypeError):
+                          continue
 
-                  except websocket.WebSocketTimeoutException:
-                      continue
+              except websocket.WebSocketTimeoutException:
+                  continue
 
-              ws.close()
-
-          except Exception as error:
-              print("BAGLANTI HATASI:", repr(error))
-              raise
+          ws.close()
 
           ranked = sorted(
               market.values(),
-              key=lambda item: item["volume_24h_usdt"],
+              key=lambda x: x["volume_24h_usdt"],
               reverse=True
           )[:50]
 
+          counts = {}
+
           for item in ranked:
-              item["asset_type"] = classify(item["symbol"])
+              kind = classify(item["symbol"])
+              item["asset_type"] = kind
+              counts[kind] = counts.get(kind, 0) + 1
 
           output = {
               "project": "FUTURE RADAR 50",
@@ -121,35 +131,41 @@ jobs:
               "source": "Binance USD-M Futures WebSocket",
               "total_symbols_seen": len(market),
               "selected_count": len(ranked),
-              "ranking": "24h quote volume",
-              "assets": ranked
+              "classification_note": "Known symbol mapping; unverified symbols remain marked for review.",
+              "assets": ranked,
+              "asset_type_counts": counts
           }
 
-          with open("futures_top50.json", "w", encoding="utf-8") as file:
-              json.dump(output, file, ensure_ascii=False, indent=2)
+          with open("futures_top50.json", "w", encoding="utf-8") as f:
+              json.dump(output, f, ensure_ascii=False, indent=2)
 
-          print("\nTOPLAM TESPIT EDILEN PARITE:", len(market))
+          print("\nTESPIT EDILEN PARITE:", len(market))
           print("SECILEN VARLIK:", len(ranked))
-          print("\nHACME GORE ILK 50")
+          print("\nVARLIK TURU DAGILIMI:")
+
+          for kind, count in sorted(counts.items()):
+              print(kind + ":", count)
+
+          print("\nILK 50 VARLIK:")
           print("-" * 60)
 
           for i, item in enumerate(ranked, 1):
               print(
                   f"{i:02d}. {item['symbol']:<16}"
-                  f" Hacim: {item['volume_24h_usdt']:,.0f} USDT"
-                  f" Tur: {item['asset_type']}"
+                  f"{item['asset_type']:<20}"
+                  f"Hacim: {item['volume_24h_usdt']:,.0f} USDT"
               )
 
-          print("\nJSON DOSYASI OLUSTURULDU: futures_top50.json")
+          print("\nJSON DOSYASI: futures_top50.json")
 
           if len(ranked) == 50:
-              print("SONUC: ILK 50 LISTESI OLUSTU")
+              print("SONUC: 50 VARLIK BASARILI")
           else:
               print("SONUC: 50 VARLIK TAMAMLANAMADI")
 
           PY
 
-      - name: Ilk 50 Dosyasini Sakla
+      - name: JSON Dosyasini Sakla
         uses: actions/upload-artifact@v4
         with:
           name: future-radar-top50
