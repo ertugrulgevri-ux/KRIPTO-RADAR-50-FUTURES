@@ -1,0 +1,109 @@
+
+name: FUTURE RADAR 50 - HISTORICAL KLINE ARCHIVE TEST
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Python Hazirla
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Binance Gecmis Mum Arsivi Testi
+        run: |
+          python - <<'PY'
+          import urllib.request
+          import zipfile
+          import io
+          import csv
+
+          SYMBOL = "BTCUSDT"
+          MONTH = "2026-10"
+          INTERVALS = ["5m", "15m", "1h", "4h", "1d"]
+
+          BASE = "https://data.binance.vision/data/futures/um/monthly/klines"
+
+          print("=" * 60)
+          print("FUTURE RADAR 50 - HISTORICAL KLINE TEST")
+          print("=" * 60)
+
+          success = 0
+
+          for interval in INTERVALS:
+              filename = f"{SYMBOL}-{interval}-{MONTH}.zip"
+
+              url = (
+                  f"{BASE}/{SYMBOL}/{interval}/{filename}"
+              )
+
+              print(f"\nTEST: {interval}")
+              print("DOSYA:", filename)
+
+              try:
+                  request = urllib.request.Request(
+                      url,
+                      headers={"User-Agent": "FutureRadar50"}
+                  )
+
+                  with urllib.request.urlopen(
+                      request, timeout=30
+                  ) as response:
+                      content = response.read()
+
+                  with zipfile.ZipFile(
+                      io.BytesIO(content)
+                  ) as archive:
+
+                      csv_files = [
+                          name for name in archive.namelist()
+                          if name.endswith(".csv")
+                      ]
+
+                      if not csv_files:
+                          raise ValueError("CSV dosyasi bulunamadi")
+
+                      with archive.open(csv_files[0]) as file:
+                          rows = list(
+                              csv.reader(
+                                  io.TextIOWrapper(
+                                      file, encoding="utf-8"
+                                  )
+                              )
+                          )
+
+                  if not rows:
+                      raise ValueError("Mum verisi bos")
+
+                  first = rows[0]
+                  last = rows[-1]
+
+                  if len(first) < 6:
+                      raise ValueError("CSV sutun sayisi yetersiz")
+
+                  print("INDIRME: BASARILI")
+                  print("MUM SAYISI:", len(rows))
+                  print("ILK MUM ZAMANI:", first[0])
+                  print("SON MUM ZAMANI:", last[0])
+                  print("SON KAPANIS:", last[4])
+
+                  success += 1
+
+              except Exception as error:
+                  print("TEST BASARISIZ:", str(error))
+
+          print("\n" + "=" * 60)
+          print("BASARILI ZAMAN DILIMI:", success, "/", len(INTERVALS))
+
+          if success == len(INTERVALS):
+              print("SONUC: GECMIS MUM ARSIVI ERISIMI BASARILI")
+          else:
+              raise SystemExit(
+                  "HATA: Tum zaman dilimleri indirilemedi."
+              )
+          PY
