@@ -7,29 +7,51 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Repository checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Python setup
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install numpy pandas
+        run: pip install numpy pandas
 
-      - name: Check indicator engine
+      - name: Test 54 factors
         run: |
-          python -m py_compile indicator_engine.py
           python - <<'PY'
-          import indicator_engine
+          import numpy as np
+          import pandas as pd
+          from indicator_engine import calculate_indicators
 
-          print("DOSYA BASARIYLA YUKLENDI")
-          print("ZAMAN DILIMI AGIRLIKLARI:")
-          print(indicator_engine.TIMEFRAME_WEIGHTS)
-          print("INDICATOR ENGINE TESTI: OK")
+          n = 120
+          x = np.arange(n)
+          close = 100 + x * 0.1 + np.sin(x / 3) * 2
+
+          data = pd.DataFrame({
+              "open": close - 0.2,
+              "high": close + 1,
+              "low": close - 1,
+              "close": close,
+              "volume": 1000 + x * 5
+          })
+
+          result = calculate_indicators(data)
+
+          print("SONUC ANAHTARLARI:", list(result.keys()))
+
+          indicators = result["indicator_values"]
+          special = result["special_values"]
+
+          print("TEKNIK GOSTERGE SAYISI:", len(indicators))
+          print("OZEL FAKTOR SAYISI:", len(special))
+          print("TOPLAM FAKTOR:", len(indicators) + len(special))
+
+          assert len(indicators) == 50, "50 teknik gosterge kontrolu basarisiz"
+          assert len(special) == 4, "4 ozel faktor kontrolu basarisiz"
+
+          print("54 FAKTOR SAYIM TESTI: BASARILI")
+          print("PUAN VE SINYAL SONUCU:")
+          print(result.get("long_score", result.get("LONG")))
+          print(result.get("short_score", result.get("SHORT")))
           PY
