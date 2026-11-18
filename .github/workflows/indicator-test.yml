@@ -1,0 +1,35 @@
+
+name: FUTURE RADAR 50 - INDICATOR TEST
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repository checkout
+        uses: actions/checkout@v4
+
+      - name: Python setup
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy pandas
+
+      - name: Check indicator engine
+        run: |
+          python -m py_compile indicator_engine.py
+          python - <<'PY'
+          import indicator_engine
+
+          print("DOSYA BASARIYLA YUKLENDI")
+          print("ZAMAN DILIMI AGIRLIKLARI:")
+          print(indicator_engine.TIMEFRAME_WEIGHTS)
+          print("INDICATOR ENGINE TESTI: OK")
+          PY
