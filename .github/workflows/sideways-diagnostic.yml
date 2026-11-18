@@ -1,0 +1,125 @@
+
+name: FUTURE RADAR 50 - SIDEWAYS DIAGNOSTIC
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install numpy pandas
+
+      - name: Diagnose sideways signals
+        run: |
+          python - <<'PY'
+          import numpy as np
+          import pandas as pd
+          from indicator_engine import calculate_indicators
+
+          N = 400
+          x = np.arange(N)
+
+          close = 100 + 0.15 * np.sin(x / 3)
+          open_price = np.concatenate(([close[0]], close[:-1]))
+
+          high = np.maximum(open_price, close) + 0.15
+          low = np.minimum(open_price, close) - 0.15
+          volume = np.full(N, 1000.0)
+
+          data = pd.DataFrame({
+              "open": open_price,
+              "high": high,
+              "low": low,
+              "close": close,
+              "volume": volume
+          })
+
+          result = calculate_indicators(data)
+
+          signals = result["signals"]
+          special = result["special_values"]
+
+          print("=" * 60)
+          print("SIDEWAYS MARKET - PUAN KAYNAGI ANALIZI")
+          print("=" * 60)
+
+          long_items = []
+          short_items = []
+
+          for name, value in signals.items():
+
+              if value is None:
+                  continue
+
+              weight = 2 if name in special else 1
+
+              long_contribution = max(value, 0) * weight
+              short_contribution = max(-value, 0) * weight
+
+              if long_contribution > 0:
+                  long_items.append(
+                      (name, value, weight, long_contribution)
+                  )
+
+              if short_contribution > 0:
+                  short_items.append(
+                      (name, value, weight, short_contribution)
+                  )
+
+          print("\nLONG PUANINA KATKI VERENLER")
+
+          for name, value, weight, contribution in sorted(
+              long_items, key=lambda item: item[3], reverse=True
+          ):
+              print(
+                  f"{name:35} "
+                  f"sinyal={value:7.3f} "
+                  f"agirlik={weight} "
+                  f"katki={contribution:7.3f}"
+              )
+
+          print("\nSHORT PUANINA KATKI VERENLER")
+
+          for name, value, weight, contribution in sorted(
+              short_items, key=lambda item: item[3], reverse=True
+          ):
+              print(
+                  f"{name:35} "
+                  f"sinyal={value:7.3f} "
+                  f"agirlik={weight} "
+                  f"katki={contribution:7.3f}"
+              )
+
+          print("\nOZEL FAKTORLER")
+
+          for name, value in special.items():
+              print(name, "=", value)
+
+          print("\nHAM GOSTERGE DEGERLERI")
+
+          for name in [
+              "Supertrend",
+              "Parabolic_SAR",
+              "RSI",
+              "ADX",
+              "Choppiness_Index",
+              "ATR",
+              "OBV"
+          ]:
+              print(name, "=", result["indicator_values"].get(name))
+
+          print("\nSON PUANLAR")
+          print("LONG:", result["long_score"])
+          print("SHORT:", result["short_score"])
+
+          print("\nDIAGNOSTIC TAMAMLANDI")
+          PY
