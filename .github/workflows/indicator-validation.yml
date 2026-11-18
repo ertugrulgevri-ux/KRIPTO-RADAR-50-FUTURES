@@ -1,0 +1,146 @@
+
+name: FUTURE RADAR 50 - INDICATOR VALIDATION
+
+on:
+  workflow_dispatch:
+
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repository checkout
+        uses: actions/checkout@v4
+
+      - name: Python setup
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy pandas
+
+      - name: Run indicator validation
+        run: |
+          python - <<'PY'
+          import numpy as np
+          import pandas as pd
+
+          from indicator_engine import (
+              calculate_indicators,
+              analyze_timeframes
+          )
+
+          print("=" * 55)
+          print("FUTURE RADAR 50 - INDICATOR VALIDATION")
+          print("=" * 55)
+
+          # Deterministic synthetic OHLCV data
+          n = 400
+          rng = np.random.default_rng(42)
+
+          close = 100 + np.cumsum(
+              np.full(n, 0.04) + rng.normal(0, 0.35, n)
+          )
+
+          open_price = np.concatenate(
+              [[close[0]], close[:-1]]
+          )
+
+          high = np.maximum(open_price, close) + rng.uniform(0.05, 0.5, n)
+          low = np.minimum(open_price, close) - rng.uniform(0.05, 0.5, n)
+          volume = rng.uniform(100, 1000, n)
+
+          data = pd.DataFrame({
+              "open": open_price,
+              "high": high,
+              "low": low,
+              "close": close,
+              "volume": volume
+          })
+
+          print("\nTEST 1: 54 FAKTOR HESAPLAMA")
+          result = calculate_indicators(data)
+
+          print("Teknik:", result["indicator_count"])
+          print("Özel:", result["special_factor_count"])
+          print("Toplam:", result["total_factor_count"])
+
+          assert result["indicator_count"] == 50
+          assert result["special_factor_count"] == 4
+          assert result["total_factor_count"] == 54
+
+          print("SONUC: BASARILI")
+
+          print("\nTEST 2: PUAN SINIRLARI")
+          print("LONG:", result["long_score"])
+          print("SHORT:", result["short_score"])
+
+          assert 0 <= result["long_score"] <= 100
+          assert 0 <= result["short_score"] <= 100
+
+          print("SONUC: BASARILI")
+
+          print("\nTEST 3: SINYAL DEGERLERI")
+          signals = result["signals"]
+
+          invalid = [
+              name for name, value in signals.items()
+              if value is not None
+              and (not np.isfinite(value) or abs(value) > 1)
+          ]
+
+          print("Toplam sinyal:", len(signals))
+          print("Gecersiz sinyal:", invalid)
+
+          assert len(signals) == 54
+          assert not invalid
+
+          print("SONUC: BASARILI")
+
+          print("\nTEST 4: GECERSIZ OHLC VERISI")
+          bad_data = data.copy()
+          bad_data.loc[10, "high"] = 1
+
+          try:
+              calculate_indicators(bad_data)
+              print("HATA: Gecersiz OHLC verisi kabul edildi")
+              raise AssertionError("Invalid OHLC was accepted")
+          except ValueError:
+              print("SONUC: GECERSIZ VERI REDDEDILDI")
+
+          print("\nTEST 5: EKSIK ZAMAN DILIMI")
+          frames = {
+              "5m": data,
+              "15m": data,
+              "1h": data,
+              "4h": data
+          }
+
+          try:
+              partial = analyze_timeframes(frames)
+              print("UYARI: Eksik zaman dilimiyle puan üretildi")
+              print("Mevcut ağırlık:", partial["available_timeframe_weight"])
+              print("Tam veri:", partial["complete_timeframes"])
+          except ValueError as exc:
+              print("SONUC: EKSIK VERI ENGELLENDI")
+              print(str(exc))
+
+          print("\nTEST 6: YONSUZ GOSTERGELER")
+          for name in [
+              "ATR",
+              "Standard_Deviation",
+              "Historical_Volatility",
+              "Ulcer_Index",
+              "Chaikin_Volatility",
+              "Volume_ROC",
+              "Relative_Volume"
+          ]:
+              print(name, "=", signals.get(name))
+
+          print("\n" + "=" * 55)
+          print("VALIDATION TESTI TAMAMLANDI")
+          print("=" * 55)
+          PY
