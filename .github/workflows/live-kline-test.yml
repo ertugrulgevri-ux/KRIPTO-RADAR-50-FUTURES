@@ -1,0 +1,49 @@
+
+name: FUTURE RADAR 50 - LIVE KLINE TEST
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Python setup
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install websocket
+        run: pip install websocket-client
+
+      - name: Binance live candle test
+        run: |
+          python - <<'PY'
+          import json
+          import websocket
+
+          url = "wss://fstream.binance.com/ws/btcusdt@kline_5m"
+
+          print("BINANCE FUTURES CANLI MUM TESTI")
+          print("Sembol: BTCUSDT")
+          print("Zaman dilimi: 5 dakika")
+
+          ws = websocket.create_connection(url, timeout=20)
+
+          for i in range(3):
+              message = json.loads(ws.recv())
+              k = message["k"]
+
+              print("--------------------------------")
+              print("MUM:", i + 1)
+              print("Acilis:", k["o"])
+              print("Yuksek:", k["h"])
+              print("Dusuk:", k["l"])
+              print("Kapanis:", k["c"])
+              print("Hacim:", k["v"])
+              print("Mum kapandi mi:", k["x"])
+
+          ws.close()
+          print("--------------------------------")
+          print("CANLI MUM TESTI TAMAMLANDI")
+          PY
