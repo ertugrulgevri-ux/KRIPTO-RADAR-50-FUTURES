@@ -25,7 +25,7 @@ jobs:
           import json
           import time
 
-          URL = "wss://fstream.binance.com/ws/btcusdt@ticker"
+          URL = "wss://fstream.binance.com/market/ws/btcusdt@ticker"
 
           print("=" * 60)
           print("FUTURE RADAR 50 - WEBSOCKET DIAGNOSTIC")
