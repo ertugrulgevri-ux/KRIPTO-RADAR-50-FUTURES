@@ -84,9 +84,20 @@ def calculate_indicators(data):
         wma_weights.sum(), raw=True
     )
 
-    half = c.rolling(10).mean()
-    full = c.rolling(20).mean()
-    hma = 2 * half - full
+    def calculate_wma(series, period):
+    weights = np.arange(1, period + 1, dtype=float)
+    return series.rolling(period).apply(
+        lambda x: np.dot(x, weights) / weights.sum(),
+        raw=True
+    )
+
+half_wma = calculate_wma(c, 10)
+full_wma = calculate_wma(c, 20)
+
+hma = calculate_wma(
+    2 * half_wma - full_wma,
+    int(np.sqrt(20))
+)
 
     vwma = _safe_div(
         (c * v).rolling(20).sum(),
@@ -120,13 +131,46 @@ def calculate_indicators(data):
 
     atr = tr.rolling(14).mean()
 
-    mid = (h + l) / 2
-    super_upper = mid + 3 * atr
-    super_lower = mid - 3 * atr
+    
+mid = (h + l) / 2
+basic_upper = mid + 3 * atr
+basic_lower = mid - 3 * atr
 
-    supertrend = pd.Series(
-        np.where(c >= super_lower, 1, -1), index=df.index
+final_upper = pd.Series(np.nan, index=df.index)
+final_lower = pd.Series(np.nan, index=df.index)
+supertrend = pd.Series(0.0, index=df.index)
+
+for i in range(len(df)):
+    if pd.isna(atr.iloc[i]):
+        continue
+
+    if i == 0 or pd.isna(atr.iloc[i - 1]):
+        final_upper.iloc[i] = basic_upper.iloc[i]
+        final_lower.iloc[i] = basic_lower.iloc[i]
+        supertrend.iloc[i] = 1
+        continue
+
+    final_upper.iloc[i] = (
+        basic_upper.iloc[i]
+        if basic_upper.iloc[i] < final_upper.iloc[i - 1]
+        or c.iloc[i - 1] > final_upper.iloc[i - 1]
+        else final_upper.iloc[i - 1]
     )
+
+    final_lower.iloc[i] = (
+        basic_lower.iloc[i]
+        if basic_lower.iloc[i] > final_lower.iloc[i - 1]
+        or c.iloc[i - 1] < final_lower.iloc[i - 1]
+        else final_lower.iloc[i - 1]
+    )
+
+    if c.iloc[i] > final_upper.iloc[i - 1]:
+        supertrend.iloc[i] = 1
+    elif c.iloc[i] < final_lower.iloc[i - 1]:
+        supertrend.iloc[i] = -1
+    else:
+        supertrend.iloc[i] = supertrend.iloc[i - 1]
+
 
     psar = pd.Series(
         np.where(c >= c.shift(5), 1, -1), index=df.index
