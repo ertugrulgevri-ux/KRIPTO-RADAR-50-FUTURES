@@ -18,22 +18,22 @@ jobs:
       - name: Install websocket
         run: pip install websocket-client
 
-      - name: Binance Subscription Test
+      - name: Binance New WebSocket Test
         run: |
           python - <<'PY'
           import json
           import websocket
           import sys
+          import time
 
-          url = "wss://fstream.binance.com/ws"
+          url = "wss://fstream.binance.com/market/stream"
 
           print("=" * 55)
-          print("BINANCE FUTURES ABONELIK TESTI")
+          print("BINANCE YENI FUTURES WEBSOCKET TESTI")
           print("=" * 55)
 
           ws = None
-          data_received = False
-          ack_received = False
+          received = set()
 
           try:
               ws = websocket.create_connection(url, timeout=15)
@@ -49,40 +49,47 @@ jobs:
               }
 
               ws.send(json.dumps(request))
-              print("ABONELIK ISTEGI: GONDERILDI")
+              print("ABONELIK ISTEGI GONDERILDI")
 
-              ws.settimeout(20)
+              deadline = time.monotonic() + 25
 
-              for i in range(5):
+              while time.monotonic() < deadline:
                   try:
-                      message = ws.recv()
-                      print("\nSUNUCU YANITI:", message[:700])
+                      ws.settimeout(5)
+                      message = json.loads(ws.recv())
 
-                      result = json.loads(message)
+                      if message.get("id") == 1:
+                          print("ABONELIK ONAYI:", message)
+                          continue
 
-                      if result.get("id") == 1 and result.get("result") is None:
-                          ack_received = True
-                          print("ABONELIK ONAYI: BASARILI")
+                      data = message.get("data", message)
+                      event = data.get("e")
 
-                      if "e" in result:
-                          data_received = True
-                          print("CANLI PIYASA VERISI: ALINDI")
+                      if event == "aggTrade":
+                          received.add("aggTrade")
+                          print("CANLI ISLEM VERISI ALINDI")
+                          print("Fiyat:", data.get("p"))
+
+                      elif event == "kline":
+                          received.add("kline")
+                          k = data.get("k", {})
+                          print("CANLI MUM VERISI ALINDI")
+                          print("Kapanis:", k.get("c"))
+                          print("Mum kapandi mi:", k.get("x"))
+
+                      if len(received) == 2:
+                          break
 
                   except websocket.WebSocketTimeoutException:
-                      print("\n20 SANİYEDE YENI MESAJ GELMEDI")
-                      break
+                      print("Veri bekleniyor...")
 
-              print("\nABONELIK ONAYI:", ack_received)
-              print("PIYASA VERISI:", data_received)
+              print("\nALINAN AKISLAR:", sorted(received))
 
-              if not ack_received and not data_received:
-                  print("SONUC: ABONELIK VE VERI DOGRULANAMADI")
-                  sys.exit(1)
-
-              if data_received:
-                  print("SONUC: CANLI VERI BASARILI")
+              if len(received) == 2:
+                  print("SONUC: IKI AKIS DA BASARILI")
               else:
-                  print("SONUC: ABONELIK ONAYLANDI, VERI BEKLENIYOR")
+                  print("SONUC: EKSIK VERI AKISI")
+                  sys.exit(1)
 
           except Exception as e:
               print("HATA:", repr(e))
