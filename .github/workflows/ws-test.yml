@@ -1,11 +1,11 @@
 
-name: FUTURE RADAR 50 - FULL MARKET TEST
+name: FUTURE RADAR 50 - TOP 50 UNIVERSE
 
 on:
   workflow_dispatch:
 
 jobs:
-  market-test:
+  scan:
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -18,36 +18,60 @@ jobs:
       - name: WebSocket Kur
         run: pip install websocket-client
 
-      - name: Tum Futures Piyasasini Tara
+      - name: Ilk 50 Varligi Belirle
         run: |
           python - <<'PY'
           import websocket
           import json
           import time
+          from datetime import datetime, timezone
 
           URL = "wss://fstream.binance.com/market/ws/!ticker@arr"
 
+          STOCKS = {"NVDA", "SNDK", "SPCX"}
+          COMMODITIES = {"XAU", "XAG", "XPT", "XPD", "WTI"}
+          LEVERAGED_ETFS = {"SOXL", "SOXS", "TQQQ", "SQQQ", "UPRO", "SPXU"}
+
+          CRYPTO = {
+              "BTC", "ETH", "BNB", "SOL", "XRP", "ADA",
+              "DOGE", "TRX", "LINK", "AVAX", "DOT", "LTC",
+              "BCH", "UNI", "AAVE", "ETC", "ATOM", "NEAR",
+              "FIL", "APT", "ARB", "OP", "SUI", "INJ",
+              "ICP", "VET", "HBAR", "SHIB", "PEPE", "TON"
+          }
+
+          def classify(symbol):
+              base = symbol[:-4] if symbol.endswith("USDT") else symbol
+
+              if base in LEVERAGED_ETFS:
+                  return "Kaldiracli ETF"
+              if base in COMMODITIES:
+                  return "Emtia"
+              if base in STOCKS:
+                  return "Hisse baglantili"
+              if base in CRYPTO:
+                  return "Kripto"
+              return "Dogrulanacak"
+
           print("=" * 60)
-          print("FUTURE RADAR 50 - FULL MARKET TEST")
+          print("FUTURE RADAR 50 - TOP 50 UNIVERSE")
           print("=" * 60)
 
           market = {}
-          message_count = 0
 
           try:
               ws = websocket.create_connection(URL, timeout=20)
               ws.settimeout(5)
 
-              print("BINANCE FUTURES BAGLANTISI: BASARILI")
-              print("Piyasa verileri 60 saniye toplanacak...")
+              print("BINANCE BAGLANTISI: BASARILI")
+              print("90 saniye boyunca veri toplaniyor...")
 
               start = time.monotonic()
 
-              while time.monotonic() - start < 60:
+              while time.monotonic() - start < 90:
                   try:
                       raw = ws.recv()
                       data = json.loads(raw)
-                      message_count += 1
 
                       if isinstance(data, dict):
                           data = [data]
@@ -63,13 +87,13 @@ jobs:
                               volume = float(item.get("q", 0))
                               change = float(item.get("P", 0))
 
-                              if price > 0:
+                              if price > 0 and volume > 0:
                                   market[symbol] = {
+                                      "symbol": symbol,
                                       "price": price,
-                                      "volume": volume,
-                                      "change": change
+                                      "volume_24h_usdt": volume,
+                                      "change_24h_percent": change
                                   }
-
                           except (ValueError, TypeError):
                               continue
 
@@ -78,36 +102,55 @@ jobs:
 
               ws.close()
 
-          except Exception as e:
-              print("BAGLANTI HATASI:", repr(e))
+          except Exception as error:
+              print("BAGLANTI HATASI:", repr(error))
+              raise
 
           ranked = sorted(
-              market.items(),
-              key=lambda x: x[1]["volume"],
+              market.values(),
+              key=lambda item: item["volume_24h_usdt"],
               reverse=True
-          )
+          )[:50]
 
-          print("\nALINAN MESAJ SAYISI:", message_count)
-          print("TOPLAM USDT PARITE:", len(ranked))
-          print("\nEN YUKSEK HACIMLI ILK 10")
+          for item in ranked:
+              item["asset_type"] = classify(item["symbol"])
+
+          output = {
+              "project": "FUTURE RADAR 50",
+              "created_utc": datetime.now(timezone.utc).isoformat(),
+              "source": "Binance USD-M Futures WebSocket",
+              "total_symbols_seen": len(market),
+              "selected_count": len(ranked),
+              "ranking": "24h quote volume",
+              "assets": ranked
+          }
+
+          with open("futures_top50.json", "w", encoding="utf-8") as file:
+              json.dump(output, file, ensure_ascii=False, indent=2)
+
+          print("\nTOPLAM TESPIT EDILEN PARITE:", len(market))
+          print("SECILEN VARLIK:", len(ranked))
+          print("\nHACME GORE ILK 50")
           print("-" * 60)
 
-          for i, (symbol, item) in enumerate(ranked[:10], 1):
+          for i, item in enumerate(ranked, 1):
               print(
-                  f"{i:02d}. {symbol:<16}"
-                  f" Fiyat: {item['price']:<15}"
-                  f" Hacim: {item['volume']:,.0f} USDT"
-                  f" Degisim: %{item['change']:.2f}"
+                  f"{i:02d}. {item['symbol']:<16}"
+                  f" Hacim: {item['volume_24h_usdt']:,.0f} USDT"
+                  f" Tur: {item['asset_type']}"
               )
 
-          print("-" * 60)
+          print("\nJSON DOSYASI OLUSTURULDU: futures_top50.json")
 
-          if len(ranked) >= 50:
-              print("SONUC: 50 COINLIK PIYASA TARAMASI BASARILI")
-          elif len(ranked) > 0:
-              print("SONUC: VERI GELDI, ANCAK 50 PARITEYE ULASILAMADI")
+          if len(ranked) == 50:
+              print("SONUC: ILK 50 LISTESI OLUSTU")
           else:
-              print("SONUC: PIYASA VERISI ALINAMADI")
+              print("SONUC: 50 VARLIK TAMAMLANAMADI")
 
-          print("TEST TAMAMLANDI")
           PY
+
+      - name: Ilk 50 Dosyasini Sakla
+        uses: actions/upload-artifact@v4
+        with:
+          name: future-radar-top50
+          path: futures_top50.json
