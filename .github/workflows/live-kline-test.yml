@@ -18,73 +18,78 @@ jobs:
       - name: Install websocket
         run: pip install websocket-client
 
-      - name: Binance WebSocket Diagnostic
+      - name: Binance Subscription Test
         run: |
           python - <<'PY'
           import json
           import websocket
           import sys
 
-          streams = [
-              (
-                  "5 DAKIKALIK MUM",
-                  "wss://fstream.binance.com/ws/btcusdt@kline_5m"
-              ),
-              (
-                  "CANLI ISLEM",
-                  "wss://fstream.binance.com/ws/btcusdt@aggTrade"
-              )
-          ]
-
-          received_any = False
+          url = "wss://fstream.binance.com/ws"
 
           print("=" * 55)
-          print("FUTURE RADAR 50 - WEBSOCKET BAGLANTI TESTI")
+          print("BINANCE FUTURES ABONELIK TESTI")
           print("=" * 55)
 
-          for name, url in streams:
-              print("\nTEST:", name)
-              print("ADRES:", url)
+          ws = None
+          data_received = False
+          ack_received = False
 
-              ws = None
+          try:
+              ws = websocket.create_connection(url, timeout=15)
+              print("BAGLANTI: BASARILI")
 
-              try:
-                  ws = websocket.create_connection(
-                      url,
-                      timeout=15
-                  )
+              request = {
+                  "method": "SUBSCRIBE",
+                  "params": [
+                      "btcusdt@aggTrade",
+                      "btcusdt@kline_5m"
+                  ],
+                  "id": 1
+              }
 
-                  print("WEBSOCKET BAGLANTISI: BASARILI")
+              ws.send(json.dumps(request))
+              print("ABONELIK ISTEGI: GONDERILDI")
 
+              ws.settimeout(20)
+
+              for i in range(5):
                   try:
                       message = ws.recv()
-                      data = json.loads(message)
+                      print("\nSUNUCU YANITI:", message[:700])
 
-                      print("CANLI VERI: ALINDI")
-                      print("VERI:", json.dumps(data)[:500])
+                      result = json.loads(message)
 
-                      received_any = True
+                      if result.get("id") == 1 and result.get("result") is None:
+                          ack_received = True
+                          print("ABONELIK ONAYI: BASARILI")
+
+                      if "e" in result:
+                          data_received = True
+                          print("CANLI PIYASA VERISI: ALINDI")
 
                   except websocket.WebSocketTimeoutException:
-                      print("CANLI VERI: 15 SANİYEDE ALINAMADI")
+                      print("\n20 SANİYEDE YENI MESAJ GELMEDI")
+                      break
 
-              except Exception as e:
-                  print("BAGLANTI HATASI:", repr(e))
+              print("\nABONELIK ONAYI:", ack_received)
+              print("PIYASA VERISI:", data_received)
 
-              finally:
-                  if ws:
-                      try:
-                          ws.close()
-                      except Exception:
-                          pass
+              if not ack_received and not data_received:
+                  print("SONUC: ABONELIK VE VERI DOGRULANAMADI")
+                  sys.exit(1)
 
-          print("\n" + "=" * 55)
+              if data_received:
+                  print("SONUC: CANLI VERI BASARILI")
+              else:
+                  print("SONUC: ABONELIK ONAYLANDI, VERI BEKLENIYOR")
 
-          if received_any:
-              print("SONUC: EN AZ BIR AKISTAN VERI ALINDI")
-          else:
-              print("SONUC: CANLI VERI ALINAMADI")
+          except Exception as e:
+              print("HATA:", repr(e))
               sys.exit(1)
 
-          print("TEST TAMAMLANDI")
+          finally:
+              if ws:
+                  ws.close()
+
           PY
