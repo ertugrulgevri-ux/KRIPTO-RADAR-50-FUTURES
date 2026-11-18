@@ -1,11 +1,11 @@
 
-name: FUTURE RADAR 50 - WEBSOCKET DIAGNOSTIC
+name: FUTURE RADAR 50 - FULL MARKET TEST
 
 on:
   workflow_dispatch:
 
 jobs:
-  websocket-test:
+  market-test:
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -18,58 +18,96 @@ jobs:
       - name: WebSocket Kur
         run: pip install websocket-client
 
-      - name: Binance BTCUSDT Veri Testi
+      - name: Tum Futures Piyasasini Tara
         run: |
           python - <<'PY'
           import websocket
           import json
           import time
 
-          URL = "wss://fstream.binance.com/market/ws/btcusdt@ticker"
+          URL = "wss://fstream.binance.com/market/ws/!ticker@arr"
 
           print("=" * 60)
-          print("FUTURE RADAR 50 - WEBSOCKET DIAGNOSTIC")
+          print("FUTURE RADAR 50 - FULL MARKET TEST")
           print("=" * 60)
-          print("Adres:", URL)
+
+          market = {}
+          message_count = 0
 
           try:
               ws = websocket.create_connection(URL, timeout=20)
-              print("BAGLANTI: BASARILI")
-              print("BTCUSDT verisi bekleniyor...")
+              ws.settimeout(5)
 
-              received = 0
+              print("BINANCE FUTURES BAGLANTISI: BASARILI")
+              print("Piyasa verileri 60 saniye toplanacak...")
+
               start = time.monotonic()
 
-              while received < 5 and time.monotonic() - start < 60:
+              while time.monotonic() - start < 60:
                   try:
                       raw = ws.recv()
                       data = json.loads(raw)
-
-                      received += 1
-
-                      print("\nMESAJ:", received)
-                      print("HAM VERI:", raw)
+                      message_count += 1
 
                       if isinstance(data, dict):
-                          print("SEMBOL:", data.get("s"))
-                          print("SON FIYAT:", data.get("c"))
-                          print("24 SAAT DEGISIM:", data.get("P"))
-                          print("24 SAAT HACIM:", data.get("q"))
+                          data = [data]
+
+                      for item in data:
+                          symbol = item.get("s", "")
+
+                          if not symbol.endswith("USDT"):
+                              continue
+
+                          try:
+                              price = float(item.get("c", 0))
+                              volume = float(item.get("q", 0))
+                              change = float(item.get("P", 0))
+
+                              if price > 0:
+                                  market[symbol] = {
+                                      "price": price,
+                                      "volume": volume,
+                                      "change": change
+                                  }
+
+                          except (ValueError, TypeError):
+                              continue
 
                   except websocket.WebSocketTimeoutException:
-                      print("Veri bekleniyor...")
+                      continue
 
               ws.close()
-
-              print("\nALINAN MESAJ SAYISI:", received)
-
-              if received > 0:
-                  print("SONUC: BTCUSDT VERISI BASARILI")
-              else:
-                  print("SONUC: VERI ALINAMADI")
 
           except Exception as e:
               print("BAGLANTI HATASI:", repr(e))
 
-          print("\nTEST TAMAMLANDI")
+          ranked = sorted(
+              market.items(),
+              key=lambda x: x[1]["volume"],
+              reverse=True
+          )
+
+          print("\nALINAN MESAJ SAYISI:", message_count)
+          print("TOPLAM USDT PARITE:", len(ranked))
+          print("\nEN YUKSEK HACIMLI ILK 10")
+          print("-" * 60)
+
+          for i, (symbol, item) in enumerate(ranked[:10], 1):
+              print(
+                  f"{i:02d}. {symbol:<16}"
+                  f" Fiyat: {item['price']:<15}"
+                  f" Hacim: {item['volume']:,.0f} USDT"
+                  f" Degisim: %{item['change']:.2f}"
+              )
+
+          print("-" * 60)
+
+          if len(ranked) >= 50:
+              print("SONUC: 50 COINLIK PIYASA TARAMASI BASARILI")
+          elif len(ranked) > 0:
+              print("SONUC: VERI GELDI, ANCAK 50 PARITEYE ULASILAMADI")
+          else:
+              print("SONUC: PIYASA VERISI ALINAMADI")
+
+          print("TEST TAMAMLANDI")
           PY
