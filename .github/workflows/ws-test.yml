@@ -1,0 +1,51 @@
+name: BINANCE FUTURES WEBSOCKET TEST
+
+on:
+  workflow_dispatch:
+
+jobs:
+  websocket-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Python Hazirla
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: WebSocket Kur
+        run: pip install websocket-client
+
+      - name: Binance Futures Gercek Veri Testi
+        run: |
+          python - <<'PY'
+          import websocket
+          import json
+          import time
+
+          url = "wss://fstream.binance.com/ws/btcusdt@trade"
+
+          print("=" * 50)
+          print("FUTURE RADAR 50 - WEBSOCKET TEST")
+          print("=" * 50)
+          print("Binance Futures BTCUSDT baglantisi deneniyor...")
+
+          ws = websocket.create_connection(url, timeout=15)
+
+          print("BAGLANTI: BASARILI")
+
+          for i in range(5):
+              message = json.loads(ws.recv())
+              print(
+                  "ISLEM:", i + 1,
+                  "| FIYAT:", message.get("p"),
+                  "| MIKTAR:", message.get("q"),
+                  "| ZAMAN:", message.get("T")
+              )
+
+          ws.close()
+
+          print("=" * 50)
+          print("TEST TAMAMLANDI")
+          PY
