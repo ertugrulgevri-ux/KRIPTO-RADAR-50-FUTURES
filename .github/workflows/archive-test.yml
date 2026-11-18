@@ -1,5 +1,5 @@
 
-name: FUTURE RADAR 50 - HISTORICAL KLINE ARCHIVE TEST
+name: FUTURE RADAR 50 - SIX MONTH DATA TEST
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - name: Python Hazirla
@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Binance Gecmis Mum Arsivi Testi
+      - name: Alti Aylik Gecmis Veriyi Kontrol Et
         run: |
           python - <<'PY'
           import urllib.request
@@ -24,86 +24,151 @@ jobs:
           import csv
 
           SYMBOL = "BTCUSDT"
-          MONTH = "2026-10"
+
+          MONTHS = [
+              "2026-05",
+              "2026-06",
+              "2026-07",
+              "2026-08",
+              "2026-09",
+              "2026-10"
+          ]
+
           INTERVALS = ["5m", "15m", "1h", "4h", "1d"]
 
-          BASE = "https://data.binance.vision/data/futures/um/monthly/klines"
+          BASE = (
+              "https://data.binance.vision/data/"
+              "futures/um/monthly/klines"
+          )
 
-          print("=" * 60)
-          print("FUTURE RADAR 50 - HISTORICAL KLINE TEST")
-          print("=" * 60)
+          MIN_CANDLES = 120
 
-          success = 0
+          print("=" * 65)
+          print("FUTURE RADAR 50 - SIX MONTH DATA TEST")
+          print("=" * 65)
+
+          results = {}
+          all_success = True
 
           for interval in INTERVALS:
-              filename = f"{SYMBOL}-{interval}-{MONTH}.zip"
 
-              url = (
-                  f"{BASE}/{SYMBOL}/{interval}/{filename}"
-              )
+              print("\nZAMAN DILIMI:", interval)
 
-              print(f"\nTEST: {interval}")
-              print("DOSYA:", filename)
+              candles = {}
 
-              try:
-                  request = urllib.request.Request(
-                      url,
-                      headers={"User-Agent": "FutureRadar50"}
+              for month in MONTHS:
+
+                  filename = (
+                      f"{SYMBOL}-{interval}-{month}.zip"
                   )
 
-                  with urllib.request.urlopen(
-                      request, timeout=30
-                  ) as response:
-                      content = response.read()
+                  url = (
+                      f"{BASE}/{SYMBOL}/{interval}/{filename}"
+                  )
 
-                  with zipfile.ZipFile(
-                      io.BytesIO(content)
-                  ) as archive:
+                  try:
+                      request = urllib.request.Request(
+                          url,
+                          headers={
+                              "User-Agent": "FutureRadar50"
+                          }
+                      )
 
-                      csv_files = [
-                          name for name in archive.namelist()
-                          if name.endswith(".csv")
-                      ]
+                      with urllib.request.urlopen(
+                          request,
+                          timeout=45
+                      ) as response:
+                          content = response.read()
 
-                      if not csv_files:
-                          raise ValueError("CSV dosyasi bulunamadi")
+                      with zipfile.ZipFile(
+                          io.BytesIO(content)
+                      ) as archive:
 
-                      with archive.open(csv_files[0]) as file:
-                          rows = list(
-                              csv.reader(
+                          csv_files = [
+                              name for name in archive.namelist()
+                              if name.endswith(".csv")
+                          ]
+
+                          if not csv_files:
+                              raise ValueError("CSV bulunamadi")
+
+                          with archive.open(csv_files[0]) as file:
+
+                              reader = csv.reader(
                                   io.TextIOWrapper(
-                                      file, encoding="utf-8"
+                                      file,
+                                      encoding="utf-8"
                                   )
                               )
-                          )
 
-                  if not rows:
-                      raise ValueError("Mum verisi bos")
+                              for row in reader:
 
-                  first = rows[0]
-                  last = rows[-1]
+                                  if len(row) < 6:
+                                      continue
 
-                  if len(first) < 6:
-                      raise ValueError("CSV sutun sayisi yetersiz")
+                                  if row[0] == "open_time":
+                                      continue
 
-                  print("INDIRME: BASARILI")
-                  print("MUM SAYISI:", len(rows))
-                  print("ILK MUM ZAMANI:", first[0])
-                  print("SON MUM ZAMANI:", last[0])
-                  print("SON KAPANIS:", last[4])
+                                  try:
+                                      timestamp = int(row[0])
+                                      values = [
+                                          float(row[i])
+                                          for i in range(1, 6)
+                                      ]
 
-                  success += 1
+                                      if (
+                                          timestamp > 0
+                                          and all(
+                                              value > 0
+                                              for value in values
+                                          )
+                                      ):
+                                          candles[timestamp] = row
 
-              except Exception as error:
-                  print("TEST BASARISIZ:", str(error))
+                                  except (ValueError, TypeError):
+                                      continue
 
-          print("\n" + "=" * 60)
-          print("BASARILI ZAMAN DILIMI:", success, "/", len(INTERVALS))
+                      print(
+                          month,
+                          "BASARILI"
+                      )
 
-          if success == len(INTERVALS):
-              print("SONUC: GECMIS MUM ARSIVI ERISIMI BASARILI")
-          else:
-              raise SystemExit(
-                  "HATA: Tum zaman dilimleri indirilemedi."
+                  except Exception as error:
+                      all_success = False
+
+                      print(
+                          month,
+                          "BASARISIZ:",
+                          str(error)
+                      )
+
+              count = len(candles)
+
+              results[interval] = count
+
+              print("TOPLAM GERCEK MUM:", count)
+              print("GEREKEN MINIMUM:", MIN_CANDLES)
+
+              if count >= MIN_CANDLES:
+                  print("VERI YETERLILIGI: BASARILI")
+              else:
+                  print("VERI YETERLILIGI: YETERSIZ")
+                  all_success = False
+
+          print("\n" + "=" * 65)
+          print("ALTI AYLIK VERI OZETI")
+          print("=" * 65)
+
+          for interval, count in results.items():
+              print(
+                  f"{interval:<8} : {count:>8} mum"
               )
+
+          if all_success and len(results) == 5:
+              print("\nSONUC: BES ZAMAN DILIMI BASARILI")
+              print("120 MUM SARTI KARSILANDI")
+          else:
+              print("\nSONUC: VERI TESTI BASARISIZ")
+              raise SystemExit(1)
+
           PY
