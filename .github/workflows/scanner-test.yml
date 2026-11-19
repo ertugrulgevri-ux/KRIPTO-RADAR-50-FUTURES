@@ -1,5 +1,5 @@
 
-name: FUTURE RADAR 50 - SCANNER TEST
+name: FUTURE RADAR 50 - MULTI SCANNER TEST
 
 on:
   workflow_dispatch:
@@ -10,19 +10,32 @@ permissions:
 jobs:
   scanner:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Python setup
+      - name: Python Hazirla
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+      - name: Kutuphaneleri Kur
         run: pip install -r requirements.txt
 
-      - name: Run scanner
+      - name: OKX Piyasa Listesini Olustur
+        run: python radar.py
+
+      - name: Ilk 5 Sozlesmeyi Analiz Et
         run: python scanner.py
+
+      - name: Sonuclari Kaydet
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: future-radar-50-test-results
+          path: |
+            futures_universe.json
+            futures_scan_results.json
+          if-no-files-found: warn
