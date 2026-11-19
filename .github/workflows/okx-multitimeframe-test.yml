@@ -1,0 +1,121 @@
+
+name: OKX MULTITIMEFRAME TEST
+
+on:
+  workflow_dispatch:
+
+jobs:
+  timeframe-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Python Hazirla
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: OKX Bes Zaman Dilimi Testi
+        run: |
+          python - <<'PY'
+          import urllib.request
+          import urllib.parse
+          import json
+          import time
+
+          HOST = "https://www.okx.com"
+
+          SYMBOLS = [
+              "BTC-USDT-SWAP",
+              "ETH-USDT-SWAP",
+              "SOL-USDT-SWAP",
+              "AAPL-USDT-SWAP",
+              "DOGE-USDT-SWAP"
+          ]
+
+          TIMEFRAMES = {
+              "5m": "5m",
+              "15m": "15m",
+              "1h": "1H",
+              "4h": "4H",
+              "1d": "1D"
+          }
+
+          print("=" * 60)
+          print("FUTURE RADAR 50 - OKX MULTITIMEFRAME TEST")
+          print("=" * 60)
+
+          total = 0
+          success = 0
+
+          for symbol in SYMBOLS:
+              print("\nSOZLESME:", symbol)
+
+              for label, interval in TIMEFRAMES.items():
+                  total += 1
+
+                  params = urllib.parse.urlencode({
+                      "instId": symbol,
+                      "bar": interval,
+                      "limit": "100"
+                  })
+
+                  url = (
+                      HOST + "/api/v5/market/candles?"
+                      + params
+                  )
+
+                  try:
+                      req = urllib.request.Request(
+                          url,
+                          headers={
+                              "User-Agent": "Mozilla/5.0"
+                          }
+                      )
+
+                      with urllib.request.urlopen(
+                          req, timeout=20
+                      ) as response:
+                          data = json.loads(
+                              response.read().decode()
+                          )
+
+                      candles = data.get("data", [])
+
+                      if (
+                          data.get("code") == "0"
+                          and len(candles) >= 50
+                      ):
+                          success += 1
+
+                          latest = candles[0]
+
+                          print(
+                              label,
+                              "BASARILI",
+                              "| Mum:", len(candles),
+                              "| Son kapanis:", latest[4]
+                          )
+                      else:
+                          print(
+                              label,
+                              "BASARISIZ",
+                              "| Mum:", len(candles),
+                              "| Mesaj:", data.get("msg")
+                          )
+
+                  except Exception as e:
+                      print(label, "HATA:", str(e))
+
+                  time.sleep(0.2)
+
+          print("\n" + "=" * 60)
+          print("TOPLAM TEST:", success, "/", total)
+
+          if success == total:
+              print("BES ZAMAN DILIMI TESTI BASARILI")
+          else:
+              print("BAZI TESTLER BASARISIZ")
+
+          print("TEST TAMAMLANDI.")
+          PY
