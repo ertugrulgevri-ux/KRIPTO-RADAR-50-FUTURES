@@ -1,6 +1,8 @@
 
 import json
+import os
 import time
+import urllib.request
 from pathlib import Path
 
 from market_data import fetch_all_timeframes
@@ -10,12 +12,11 @@ from indicator_engine import analyze_timeframes
 UNIVERSE_FILE = "futures_universe.json"
 OUTPUT_FILE = "futures_scan_results.json"
 
-# İlk denemede yalnızca 5 sözleşme taranacak.
 SCAN_LIMIT = 531
+TOP_COUNT = 10
 
 
 def find_asset_list(data):
-    """JSON içindeki en uzun sözleşme listesini bulur."""
     found = []
 
     def search(item):
@@ -56,6 +57,7 @@ def get_volume(asset):
                 return float(asset[key])
             except (TypeError, ValueError):
                 pass
+
     return 0.0
 
 
@@ -71,8 +73,6 @@ def load_symbols():
         data = json.load(file)
 
     assets = find_asset_list(data)
-
-    # Hacmi yüksek olan sözleşmeler önce taranır.
     assets.sort(key=get_volume, reverse=True)
 
     selected = []
@@ -92,6 +92,88 @@ def load_symbols():
     return selected, assets
 
 
+def send_telegram_message(message):
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+
+    if not token or not chat_id:
+        print("Telegram bilgileri bulunamadı. Mesaj gönderilmedi.")
+        return False
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+
+    data = {
+        "chat_id": chat_id,
+        "text": message,
+        "disable_web_page_preview": True,
+    }
+
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(data).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    with urllib.request.urlopen(request, timeout=30) as response:
+        result = json.loads(response.read().decode("utf-8"))
+
+    if not result.get("ok"):
+        raise RuntimeError("Telegram mesaj gönderimi başarısız.")
+
+    print("Telegram raporu başarıyla gönderildi.")
+    return True
+
+
+def create_telegram_report(output):
+    long_ranking = output["long_ranking"][:TOP_COUNT]
+    short_ranking = output["short_ranking"][:TOP_COUNT]
+
+    lines = [
+        "FUTURE RADAR 50",
+        "OKX FUTURES PIYASA RAPORU",
+        "",
+        f"Taranan: {output['scanned_count']}",
+        f"Basarisiz: {output['failed_count']}",
+        f"Toplam istenen: {output['requested_count']}",
+        "",
+        "EN GUCLU 10 LONG",
+    ]
+
+    if long_ranking:
+        for index, item in enumerate(long_ranking, start=1):
+            lines.append(
+                f"{index}. {item['symbol']} - "
+                f"{item['long_score']}/100 "
+                f"({item['long_label']})"
+            )
+    else:
+        lines.append("Analiz sonucu yok.")
+
+    lines.extend([
+        "",
+        "EN GUCLU 10 SHORT",
+    ])
+
+    if short_ranking:
+        for index, item in enumerate(short_ranking, start=1):
+            lines.append(
+                f"{index}. {item['symbol']} - "
+                f"{item['short_score']}/100 "
+                f"({item['short_label']})"
+            )
+    else:
+        lines.append("Analiz sonucu yok.")
+
+    lines.extend([
+        "",
+        "Not: Puanlar teknik tarama sonucudur, "
+        "tek basina islem tavsiyesi degildir.",
+    ])
+
+    return "\n".join(lines)
+
+
 def run_scan():
     print("=" * 60)
     print("FUTURE RADAR 50 - COKLU SOZLESME TARAMASI")
@@ -104,8 +186,8 @@ def run_scan():
         for item in assets
     }
 
-    print(f"\nPiyasada bulunan sözleşme sayısı: {len(assets)}")
-    print(f"Bu denemede taranacak sözleşme: {len(symbols)}")
+    print(f"\nPiyasadaki sozlesme sayisi: {len(assets)}")
+    print(f"Taranacak sozlesme: {len(symbols)}")
 
     results = []
     errors = []
@@ -116,7 +198,6 @@ def run_scan():
 
         try:
             timeframe_data = fetch_all_timeframes(symbol)
-
             result = analyze_timeframes(timeframe_data)
 
             info = asset_info.get(symbol, {})
@@ -183,17 +264,25 @@ def run_scan():
     print("\n" + "=" * 60)
     print("TARAMA TAMAMLANDI")
     print("=" * 60)
-    print(f"Başarılı analiz: {len(results)}")
-    print(f"Başarısız analiz: {len(errors)}")
-    print(f"Sonuç dosyası: {OUTPUT_FILE}")
+    print(f"Basarili analiz: {len(results)}")
+    print(f"Basarisiz analiz: {len(errors)}")
+    print(f"Sonuc dosyasi: {OUTPUT_FILE}")
 
-    print("\nEN YÜKSEK LONG PUANLARI")
-    for item in long_ranking:
+    print("\nEN YUKSEK LONG PUANLARI")
+    for item in long_ranking[:TOP_COUNT]:
         print(item["symbol"], item["long_score"])
 
-    print("\nEN YÜKSEK SHORT PUANLARI")
-    for item in short_ranking:
+    print("\nEN YUKSEK SHORT PUANLARI")
+    for item in short_ranking[:TOP_COUNT]:
         print(item["symbol"], item["short_score"])
+
+    report = create_telegram_report(output)
+
+    try:
+        send_telegram_message(report)
+    except Exception as error:
+        print(f"TELEGRAM GONDERIM HATASI: {error}")
+        raise
 
 
 if __name__ == "__main__":
