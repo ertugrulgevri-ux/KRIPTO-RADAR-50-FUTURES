@@ -1,0 +1,93 @@
+
+name: OKX FUTURES BAGLANTI TESTI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  okx-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Python Hazirla
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: OKX Futures API Testi
+        run: |
+          python - <<'PY'
+          import urllib.request
+          import urllib.parse
+          import json
+
+          host = "https://www.okx.com"
+
+          tests = [
+              ("/api/v5/public/instruments",
+               {"instType": "SWAP", "instId": "BTC-USDT-SWAP"}),
+
+              ("/api/v5/market/ticker",
+               {"instId": "BTC-USDT-SWAP"}),
+
+              ("/api/v5/market/candles",
+               {"instId": "BTC-USDT-SWAP",
+                "bar": "15m", "limit": "2"}),
+
+              ("/api/v5/public/open-interest",
+               {"instType": "SWAP",
+                "instId": "BTC-USDT-SWAP"}),
+
+              ("/api/v5/public/funding-rate",
+               {"instId": "BTC-USDT-SWAP"})
+          ]
+
+          success = 0
+
+          print("=" * 55)
+          print("OKX FUTURES BAGLANTI TESTI")
+          print("=" * 55)
+
+          for endpoint, params in tests:
+              query = urllib.parse.urlencode(params)
+              url = host + endpoint + "?" + query
+
+              print("\nTEST:", endpoint)
+
+              try:
+                  req = urllib.request.Request(
+                      url,
+                      headers={"User-Agent": "Mozilla/5.0"}
+                  )
+
+                  with urllib.request.urlopen(
+                      req, timeout=20
+                  ) as response:
+                      body = response.read().decode("utf-8")
+                      data = json.loads(body)
+
+                  print("HTTP: 200")
+                  print("API CODE:", data.get("code"))
+                  print("MESAJ:", data.get("msg"))
+
+                  if data.get("code") == "0" and data.get("data"):
+                      success += 1
+                      print("SONUC: BASARILI")
+                      print("VERI:", str(data["data"][0])[:400])
+                  else:
+                      print("SONUC: GECERLI VERI YOK")
+
+              except Exception as e:
+                  print("BAGLANTI HATASI:", str(e))
+
+          print("\n" + "=" * 55)
+          print("BASARILI TEST:", success, "/", len(tests))
+
+          if success == len(tests):
+              print("OKX FUTURES BAGLANTISI BASARILI")
+          else:
+              print("OKX BAGLANTISI TAM DOGRULANAMADI")
+
+          print("TEST TAMAMLANDI.")
+          PY
