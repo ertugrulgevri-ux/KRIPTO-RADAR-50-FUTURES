@@ -3,6 +3,12 @@ name: FUTURE RADAR 50 - MULTI SCANNER TEST
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 * * * *"
+
+concurrency:
+  group: future-radar-50-scan
+  cancel-in-progress: false
 
 permissions:
   contents: read
