@@ -1,0 +1,138 @@
+
+name: OKX MARKET UNIVERSE TEST
+
+on:
+  workflow_dispatch:
+
+jobs:
+  market-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Python Hazirla
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: OKX USDT Perpetual Tarama Testi
+        run: |
+          python - <<'PY'
+          import urllib.request
+          import json
+          import time
+
+          URL = (
+              "https://www.okx.com/api/v5/public/instruments"
+              "?instType=SWAP"
+          )
+
+          print("=" * 55)
+          print("OKX MARKET UNIVERSE TEST")
+          print("=" * 55)
+
+          try:
+              req = urllib.request.Request(
+                  URL,
+                  headers={"User-Agent": "Mozilla/5.0"}
+              )
+
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  data = json.loads(response.read().decode())
+
+              if data.get("code") != "0":
+                  raise Exception(data.get("msg", "API error"))
+
+              instruments = data.get("data", [])
+
+              usdt_perpetuals = []
+
+              for item in instruments:
+                  if (
+                      item.get("settleCcy") == "USDT"
+                      and item.get("ctType") == "linear"
+                      and item.get("state") == "live"
+                      and item.get("expTime") == ""
+                  ):
+                      usdt_perpetuals.append(item)
+
+              usdt_perpetuals.sort(
+                  key=lambda x: x.get("instId", "")
+              )
+
+              print("\nTOPLAM SWAP SOZLESMESI:",
+                    len(instruments))
+
+              print("USDT PERPETUAL SAYISI:",
+                    len(usdt_perpetuals))
+
+              print("\nILK 30 SOZLESME:")
+
+              for item in usdt_perpetuals[:30]:
+                  print(
+                      item.get("instId"),
+                      "|",
+                      "Durum:", item.get("state"),
+                      "|",
+                      "Kontrat:", item.get("ctValCcy")
+                  )
+
+              print("\n" + "=" * 55)
+              print("ORNEK FIYAT TESTLERI")
+              print("=" * 55)
+
+              success = 0
+
+              for item in usdt_perpetuals[:5]:
+                  symbol = item["instId"]
+
+                  url = (
+                      "https://www.okx.com/api/v5/market/ticker"
+                      "?instId=" + symbol
+                  )
+
+                  try:
+                      req = urllib.request.Request(
+                          url,
+                          headers={"User-Agent": "Mozilla/5.0"}
+                      )
+
+                      with urllib.request.urlopen(
+                          req, timeout=15
+                      ) as response:
+                          ticker = json.loads(
+                              response.read().decode()
+                          )
+
+                      if (
+                          ticker.get("code") == "0"
+                          and ticker.get("data")
+                      ):
+                          price = ticker["data"][0].get("last")
+                          print("BASARILI:", symbol, price)
+                          success += 1
+                      else:
+                          print("VERI YOK:", symbol)
+
+                  except Exception as e:
+                      print("HATA:", symbol, str(e))
+
+                  time.sleep(0.3)
+
+              print("\nFIYAT TESTI:", success, "/",
+                    min(5, len(usdt_perpetuals)))
+
+              print("\n" + "=" * 55)
+
+              if usdt_perpetuals and success > 0:
+                  print("MARKET UNIVERSE TEST BASARILI")
+              else:
+                  print("MARKET UNIVERSE TEST BASARISIZ")
+
+              print("TEST TAMAMLANDI.")
+
+          except Exception as e:
+              print("ANA TEST HATASI:", str(e))
+              raise
+
+          PY
