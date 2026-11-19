@@ -1,0 +1,164 @@
+
+name: FUTURE RADAR 50 - OKX ALL MARKET DATA TEST
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Python setup
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Test 50 contracts and 5 timeframes
+        run: |
+          python - <<'PY'
+          import requests
+          import time
+          from datetime import datetime
+
+          BASE = "https://www.okx.com"
+          TIMEFRAMES = ["5m", "15m", "1H", "4H", "1D"]
+          LIMIT = "100"
+          MAX_SYMBOLS = 50
+
+          session = requests.Session()
+          session.headers.update({
+              "User-Agent": "FUTURE-RADAR-50/1.0"
+          })
+
+          print("=" * 60)
+          print("FUTURE RADAR 50 - OKX ALL MARKET DATA TEST")
+          print("=" * 60)
+
+          start_time = time.time()
+
+          # 1. Canlı USDT teminatlı doğrusal perpetual sözleşmeleri al
+          url = BASE + "/api/v5/public/instruments"
+          params = {"instType": "SWAP"}
+
+          response = session.get(url, params=params, timeout=20)
+          response.raise_for_status()
+          result = response.json()
+
+          if result.get("code") != "0":
+              raise RuntimeError("OKX enstrüman listesi alınamadı: " + str(result))
+
+          instruments = [
+              item["instId"]
+              for item in result.get("data", [])
+              if item.get("settleCcy") == "USDT"
+              and item.get("ctType") == "linear"
+              and item.get("state") == "live"
+              and item.get("expTime", "") == ""
+          ]
+
+          total_available = len(instruments)
+          symbols = instruments[:MAX_SYMBOLS]
+
+          print(f"\nCanlı USDT perpetual sözleşme: {total_available}")
+          print(f"Bu testte kontrol edilecek: {len(symbols)}")
+          print(f"Zaman dilimleri: {TIMEFRAMES}")
+          print(f"Beklenen kontrol: {len(symbols) * len(TIMEFRAMES)}")
+          print("-" * 60)
+
+          # 2. Her sözleşmede beş zaman dilimini kontrol et
+          success = 0
+          failed = 0
+          errors = []
+          checked = 0
+
+          for index, symbol in enumerate(symbols, start=1):
+              print(f"\n[{index}/{len(symbols)}] {symbol}")
+
+              for timeframe in TIMEFRAMES:
+                  checked += 1
+                  endpoint = BASE + "/api/v5/market/candles"
+
+                  try:
+                      r = session.get(
+                          endpoint,
+                          params={
+                              "instId": symbol,
+                              "bar": timeframe,
+                              "limit": LIMIT
+                          },
+                          timeout=20
+                      )
+
+                      r.raise_for_status()
+                      data = r.json()
+
+                      if data.get("code") != "0":
+                          raise RuntimeError(
+                              f"OKX kodu: {data.get('code')} - {data.get('msg')}"
+                          )
+
+                      candles = data.get("data", [])
+
+                      if not candles:
+                          raise RuntimeError("Mum verisi boş")
+
+                      if len(candles) < 50:
+                          raise RuntimeError(
+                              f"Yetersiz mum sayısı: {len(candles)}"
+                          )
+
+                      success += 1
+                      print(
+                          f"  {timeframe}: BASARILI | "
+                          f"Mum: {len(candles)} | "
+                          f"Son kapanış alanı: {candles[0][4]}"
+                      )
+
+                  except Exception as e:
+                      failed += 1
+                      errors.append((symbol, timeframe, str(e)))
+                      print(f"  {timeframe}: HATA | {e}")
+
+                  # İstekleri kontrollü aralıklarla gönder
+                  time.sleep(0.15)
+
+              # Sözleşmeler arasında kısa mola
+              time.sleep(0.3)
+
+          elapsed = time.time() - start_time
+          expected = len(symbols) * len(TIMEFRAMES)
+
+          print("\n" + "=" * 60)
+          print("TEST SONUCU")
+          print("=" * 60)
+          print(f"Toplam sözleşme evreni: {total_available}")
+          print(f"Test edilen sözleşme: {len(symbols)}")
+          print(f"Kontrol edilen veri: {checked}/{expected}")
+          print(f"Başarılı: {success}")
+          print(f"Başarısız: {failed}")
+          print(f"Çalışma süresi: {elapsed:.1f} saniye")
+
+          if errors:
+              print("\nHATA LİSTESİ:")
+              for symbol, timeframe, error in errors[:30]:
+                  print(f"{symbol} | {timeframe} | {error}")
+
+          print("\n" + "=" * 60)
+
+          if failed == 0 and success == expected:
+              print("50 SOZLESME - 5 ZAMAN DILIMI TESTI BASARILI")
+          else:
+              print("TESTTE BAZI HATALAR VAR")
+
+          print("=" * 60)
+          PY
