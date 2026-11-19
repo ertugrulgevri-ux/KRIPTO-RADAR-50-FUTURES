@@ -1,0 +1,39 @@
+
+name: FUTURE RADAR 50 - OKX RADAR SCAN
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  radar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Repository checkout
+        uses: actions/checkout@v4
+
+      - name: Python setup
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run FUTURE RADAR 50
+        run: |
+          python radar.py
+
+      - name: Upload market universe
+        uses: actions/upload-artifact@v4
+        with:
+          name: future-radar-50-market-universe
+          path: futures_universe.json
+          if-no-files-found: error
+          retention-days: 7
