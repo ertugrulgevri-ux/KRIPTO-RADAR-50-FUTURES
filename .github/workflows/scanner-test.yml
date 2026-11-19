@@ -27,7 +27,10 @@ jobs:
       - name: OKX Piyasa Listesini Olustur
         run: python radar.py
 
-      - name: Ilk 5 Sozlesmeyi Analiz Et
+      - name: FUTURE RADAR 50 Tarama ve Telegram Raporu
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python scanner.py
 
       - name: Sonuclari Kaydet
