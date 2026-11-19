@@ -11,7 +11,7 @@ UNIVERSE_FILE = "futures_universe.json"
 OUTPUT_FILE = "futures_scan_results.json"
 
 # İlk denemede yalnızca 5 sözleşme taranacak.
-SCAN_LIMIT = 5
+SCAN_LIMIT = 531
 
 
 def find_asset_list(data):
