@@ -1,0 +1,37 @@
+
+name: FUTURE RADAR 50 - BINANCE UNIVERSE TEST
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  universe-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Repository checkout
+        uses: actions/checkout@v4
+
+      - name: Python setup
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Binance universe discovery
+        run: python radar.py
+
+      - name: Upload universe result
+        uses: actions/upload-artifact@v4
+        with:
+          name: futures-universe-test
+          path: futures_universe.json
+          if-no-files-found: error
