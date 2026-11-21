@@ -8,233 +8,186 @@ import requests
 
 # ==========================================
 # FUTURE RADAR 50
-# BINANCE USD-M FUTURES MARKET DISCOVERY
+# OKX USDT FUTURES MARKET DISCOVERY
 # ==========================================
 
-BASE_URL = "https://fapi.binance.com"
+BASE_URL = "https://www.okx.com"
 OUTPUT_FILE = "futures_universe.json"
 
 SESSION = requests.Session()
 SESSION.headers.update({
-    "User-Agent": "FUTURE-RADAR-50/3.0"
+    "User-Agent": "FUTURE-RADAR-50/2.0"
 })
 
 
-def get_binance_data(endpoint, attempts=4):
-    """Binance Futures API verisini kontrollu alir."""
-
+def get_okx_data(endpoint, params=None, attempts=4):
     url = BASE_URL + endpoint
 
     for attempt in range(attempts):
         try:
-            response = SESSION.get(url, timeout=30)
+            response = SESSION.get(
+                url,
+                params=params,
+                timeout=25
+            )
 
             if response.status_code in (418, 429):
-                wait = min(5 * (attempt + 1), 30)
-                print("API limit uyarisi. Bekleniyor:", wait)
-                time.sleep(wait)
+                time.sleep(2 ** attempt)
                 continue
 
             response.raise_for_status()
-            return response.json()
+            result = response.json()
 
-        except (requests.RequestException, ValueError) as error:
-            if attempt == attempts - 1:
+            if result.get("code") != "0":
                 raise RuntimeError(
-                    f"Binance verisi alinamadi: {error}"
+                    f"OKX API hatasi: {result.get('msg')}"
                 )
 
-            time.sleep(2 * (attempt + 1))
+            return result.get("data", [])
 
-    raise RuntimeError("Binance baglantisi basarisiz.")
+        except Exception:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(2 ** attempt)
+
+    raise RuntimeError("OKX verisi alinamadi.")
 
 
-def safe_float(value):
+def safe_float(value, default=0.0):
     try:
         number = float(value)
-
-        if not os.path.exists(OUTPUT_FILE):
-            pass
-
         if number != number or abs(number) == float("inf"):
-            return 0.0
-
+            return default
         return number
-
     except (TypeError, ValueError):
-        return 0.0
+        return default
 
 
-def classify_asset(item):
-    """Binance underlyingType ve subtype bilgilerini kullanir."""
+def classify_asset(inst_category):
+    mapping = {
+        "1": "CRYPTO",
+        "3": "STOCK",
+        "4": "COMMODITY",
+        "5": "FOREX",
+        "6": "BOND"
+    }
 
-    underlying_type = str(
-        item.get("underlyingType", "")
-    ).upper()
-
-    subtypes = item.get("underlyingSubType", [])
-
-    if not isinstance(subtypes, list):
-        subtypes = []
-
-    subtype_text = " ".join(
-        str(value).upper() for value in subtypes
-    )
-
-    if any(x in subtype_text for x in (
-        "STOCK", "EQUITY", "SHARES"
-    )):
-        return "STOCK"
-
-    if any(x in subtype_text for x in (
-        "METAL", "ENERGY", "COMMODITY"
-    )):
-        return "COMMODITY"
-
-    if "FOREX" in subtype_text or "CURRENCY" in subtype_text:
-        return "FOREX"
-
-    if "BOND" in subtype_text:
-        return "BOND"
-
-    if underlying_type == "COIN":
-        return "CRYPTO"
-
-    if underlying_type == "INDEX":
-        return "INDEX"
-
-    return "UNCLASSIFIED"
+    return mapping.get(str(inst_category), "UNCLASSIFIED")
 
 
-def get_filter_value(item, filter_type, key):
-    for entry in item.get("filters", []):
-        if entry.get("filterType") == filter_type:
-            return safe_float(entry.get(key))
-
-    return 0.0
+def get_filter_value(filters, filter_type, field):
+    for item in filters:
+        if item.get("filterType") == filter_type:
+            return item.get(field, "")
+    return ""
 
 
 def main():
-
-    print("=" * 60)
+    print("=" * 56)
     print("          FUTURE RADAR 50")
-    print("     BINANCE USD-M FUTURES TARAMASI")
-    print("=" * 60)
+    print("       OKX USDT FUTURES TARAMASI")
+    print("=" * 56)
 
-    # 1. Sozlesme bilgileri
-    print("\n[1/5] Binance sozlesmeleri aliniyor...")
+    print("\n[1/5] OKX sozlesmeleri aliniyor...")
 
-    exchange_info = get_binance_data(
-        "/fapi/v1/exchangeInfo"
+    instruments = get_okx_data(
+        "/api/v5/public/instruments",
+        {"instType": "SWAP"}
     )
 
-    instruments = exchange_info.get("symbols", [])
+    print(f"Bulunan SWAP sozlesmesi: {len(instruments)}")
 
-    if not isinstance(instruments, list) or not instruments:
-        raise RuntimeError("Sozlesme verisi bulunamadi.")
+    print("\n[2/5] 24 saatlik piyasa verileri aliniyor...")
 
-    print("Toplam sozlesme:", len(instruments))
-
-    # 2. 24 saatlik piyasa verileri
-    print("\n[2/5] Piyasa verileri aliniyor...")
-
-    tickers = get_binance_data(
-        "/fapi/v1/ticker/24hr"
+    tickers = get_okx_data(
+        "/api/v5/market/tickers",
+        {"instType": "SWAP"}
     )
-
-    if not isinstance(tickers, list):
-        raise RuntimeError("Ticker verisi formati hatali.")
 
     ticker_map = {
-        item["symbol"]: item
+        item.get("instId"): item
         for item in tickers
-        if isinstance(item, dict) and item.get("symbol")
     }
 
-    print("Ticker sayisi:", len(ticker_map))
+    print(f"Bulunan ticker: {len(tickers)}")
 
-    # 3. Uygun sozlesmeleri filtrele
-    print("\n[3/5] Aktif USDT perpetual sozlesmeler seciliyor...")
+    print("\n[3/5] USDT perpetual sozlesmeler filtreleniyor...")
 
     assets = []
     excluded = 0
-    missing_ticker = 0
 
-    for item in instruments:
+    for instrument in instruments:
+        inst_id = instrument.get("instId", "")
 
-        if item.get("status") != "TRADING":
+        if instrument.get("state") != "live":
             excluded += 1
             continue
 
-        if item.get("contractType") != "PERPETUAL":
+        if instrument.get("instType") != "SWAP":
             excluded += 1
             continue
 
-        if item.get("quoteAsset") != "USDT":
+        if instrument.get("settleCcy") != "USDT":
             excluded += 1
             continue
 
-        if item.get("marginAsset") != "USDT":
+        if instrument.get("ctType") != "linear":
             excluded += 1
             continue
 
-        symbol = item.get("symbol", "")
-        ticker = ticker_map.get(symbol)
-
-        if ticker is None:
-            missing_ticker += 1
+        if instrument.get("expTime", ""):
+            excluded += 1
             continue
 
-        price = safe_float(ticker.get("lastPrice"))
-        open_price = safe_float(ticker.get("openPrice"))
-        base_volume = safe_float(ticker.get("volume"))
-        quote_volume = safe_float(ticker.get("quoteVolume"))
+        ticker = ticker_map.get(inst_id)
+
+        if not ticker:
+            excluded += 1
+            continue
+
+        price = safe_float(ticker.get("last"))
+        volume = safe_float(ticker.get("volCcy24h"))
+
+        quote_volume = volume * price
 
         if price <= 0 or quote_volume <= 0:
             excluded += 1
             continue
 
-        change = safe_float(
-            ticker.get("priceChangePercent")
+        category = classify_asset(
+            instrument.get("instCategory", "")
         )
 
         assets.append({
-            "symbol": symbol,
-            "baseAsset": item.get("baseAsset"),
-            "quoteAsset": item.get("quoteAsset"),
-            "settleAsset": item.get("marginAsset"),
-            "contractType": item.get("contractType"),
-            "exchange": "BINANCE",
-            "underlyingType": item.get("underlyingType", ""),
-            "underlyingSubType": item.get(
-                "underlyingSubType", []
-            ),
-            "category": classify_asset(item),
+            "symbol": inst_id,
+            "instId": inst_id,
+            "baseAsset": instrument.get("baseCcy", ""),
+            "quoteAsset": instrument.get("quoteCcy", ""),
+            "settleAsset": instrument.get("settleCcy", ""),
+            "exchange": "OKX",
+            "category": category,
             "price": price,
-            "open24h": open_price,
-            "change24hPercent": change,
-            "high24h": safe_float(ticker.get("highPrice")),
-            "low24h": safe_float(ticker.get("lowPrice")),
-            "baseVolume24h": base_volume,
+            "open24h": safe_float(ticker.get("open24h")),
+            "change24hPercent": safe_float(
+                ticker.get("change24h")
+            ),
+            "high24h": safe_float(ticker.get("high24h")),
+            "low24h": safe_float(ticker.get("low24h")),
+            "baseVolume24h": safe_float(ticker.get("vol24h")),
             "quoteVolume24h": quote_volume,
             "tickSize": get_filter_value(
-                item, "PRICE_FILTER", "tickSize"
+                instrument.get("filters", []),
+                "PRICE_FILTER",
+                "tickSize"
             ),
-            "lotSize": get_filter_value(
-                item, "LOT_SIZE", "stepSize"
-            ),
-            "minSize": get_filter_value(
-                item, "LOT_SIZE", "minQty"
-            )
+            "lotSize": instrument.get("lotSz", ""),
+            "minSize": instrument.get("minSz", "")
         })
 
-    if not assets:
-        raise RuntimeError(
-            "Uygun USDT perpetual sozlesme bulunamadi."
-        )
+    print(f"Uygun sozlesme: {len(assets)}")
+    print(f"Filtrelenen: {excluded}")
 
-    # 4. Hacme gore siralama
-    print("\n[4/5] Hacim siralamasi yapiliyor...")
+    print("\n[4/5] Varliklar siniflandiriliyor...")
 
     assets.sort(
         key=lambda x: x["quoteVolume24h"],
@@ -248,8 +201,8 @@ def main():
 
     non_crypto = [
         x for x in assets
-        if x["category"] not in (
-            "CRYPTO", "UNCLASSIFIED"
+        if x["category"] in (
+            "STOCK", "COMMODITY", "FOREX", "BOND"
         )
     ]
 
@@ -258,30 +211,30 @@ def main():
         if x["category"] == "UNCLASSIFIED"
     ]
 
-    # 5. Sonuc dosyasi
-    print("\n[5/5] Sonuc dosyasi hazirlaniyor...")
+    print(f"CRYPTO: {len(crypto)}")
+    print(f"NON-CRYPTO: {len(non_crypto)}")
+    print(f"UNCLASSIFIED: {len(unclassified)}")
+
+    print("\n[5/5] Sonuc dosyasi olusturuluyor...")
 
     output = {
-        "project": "FUTURE RADAR 50",
-        "market": "BINANCE USD-M USDT PERPETUAL",
+        "exchange": "OKX",
+        "market": "USDT_LINEAR_PERPETUAL",
         "scan_time": datetime.now(
             timezone.utc
         ).isoformat(),
-        "filters": {
-            "status": "TRADING",
-            "contractType": "PERPETUAL",
-            "quoteAsset": "USDT",
-            "marginAsset": "USDT"
-        },
         "summary": {
-            "total_exchange_symbols": len(instruments),
-            "total_tickers": len(ticker_map),
-            "eligible_assets": len(assets),
-            "crypto_count": len(crypto),
-            "non_crypto_count": len(non_crypto),
-            "unclassified_count": len(unclassified),
-            "excluded_count": excluded,
-            "missing_ticker_count": missing_ticker
+            "total_assets": len(assets),
+            "crypto": len(crypto),
+            "non_crypto": len(non_crypto),
+            "unclassified": len(unclassified)
+        },
+        "filters": {
+            "instType": "SWAP",
+            "settleCcy": "USDT",
+            "ctType": "linear",
+            "state": "live",
+            "expTime": "empty"
         },
         "top50_by_volume": assets[:50],
         "assets": assets
@@ -294,43 +247,33 @@ def main():
             output,
             file,
             ensure_ascii=False,
-            indent=2,
-            allow_nan=False
+            indent=2
         )
 
     os.replace(temp_file, OUTPUT_FILE)
 
-    # Rapor
-    print("\n" + "=" * 60)
-    print("BINANCE TARAMASI TAMAMLANDI")
-    print("=" * 60)
+    print("\n" + "=" * 56)
+    print("TARAMA TAMAMLANDI")
+    print("=" * 56)
+    print(f"Toplam uygun sozlesme: {len(assets)}")
+    print(f"Kripto: {len(crypto)}")
+    print(f"Kripto disi: {len(non_crypto)}")
+    print(f"Siniflandirilmamis: {len(unclassified)}")
+    print(f"Dosya: {OUTPUT_FILE}")
 
-    print("Uygun toplam varlik:", len(assets))
-    print("Kripto:", len(crypto))
-    print("Kripto disi:", len(non_crypto))
-    print("Siniflandirilamayan:", len(unclassified))
-    print("Eksik ticker:", missing_ticker)
+    print("\nEN YUKSEK HACIMLI 10 SOZLESME:")
 
-    print("\nEN YUKSEK HACIMLI ILK 20")
-
-    for index, asset in enumerate(assets[:20], 1):
+    for index, asset in enumerate(assets[:10], 1):
         print(
-            f"{index:02d}. {asset['symbol']:<20}"
-            f" {asset['category']:<14}"
-            f" Hacim: {asset['quoteVolume24h']:,.0f} USDT"
+            f"{index}. {asset['instId']} | "
+            f"{asset['category']} | "
+            f"{asset['quoteVolume24h']:,.0f} USDT"
         )
-
-    print("\nDosya olusturuldu:", OUTPUT_FILE)
-    print("FUTURE RADAR 50 piyasa kesfi tamamlandi.")
 
 
 if __name__ == "__main__":
     try:
         main()
-
     except Exception as error:
-        print("\nRADAR HATASI:", str(error))
+        print(f"\nRADAR HATASI: {error}")
         raise
-
-    finally:
-        SESSION.close()
